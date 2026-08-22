@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Virtual Teammate · Lead CRM</title>
+<style>
+  :root{
+    --bg:#f5f3ee; --card:#fffdf9; --ink:#1a1a1a; --muted:#4a4a4a;
+    --border:#e4e0d4; --accent:#5d6cb1; --gold:#ffc107; --gold-deep:#d9a455;
+    --accent-soft:#e9ecf8; --purple-soft:#6c7bd6;
+    --shadow:0 1px 3px rgba(26,26,26,.07), 0 8px 24px rgba(26,26,26,.06);
+    --leads:#9498ac; --mql:#6c7bd6; --sql:#5d6cb1; --deals:#ffc107;
+    --won:#3aa76d; --lost:#d64545; --client:#1a1a1a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  @import url('https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;600;700;800&display=swap');
+  body{font-family:'League Spartan',ui-sans-serif,system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+  header{background:var(--card);border-bottom:2px solid var(--ink);padding:14px 28px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:50}
+  .grad-strip{height:5px;background:linear-gradient(115deg,#6c7bd6 0%,#b3a8cf 50%,#ffc107 100%);position:sticky;top:0;z-index:51}
+  .logo{display:flex;align-items:center;gap:12px;font-weight:800;font-size:17px}
+  .logo img.logo-img{height:64px;width:auto;display:block}
+  .logo-mark{display:none}
+  nav{display:flex;gap:6px;margin-left:28px;background:#efece3;padding:5px;border-radius:12px;border:1.5px solid var(--ink)}
+  nav button{background:none;border:none;padding:9px 18px;border-radius:9px;font-size:14px;font-weight:700;color:var(--muted);cursor:pointer;transition:all .15s ease;display:flex;align-items:center;gap:6px}
+  nav button:hover{color:var(--ink)}
+  nav button.active{background:var(--ink);color:var(--gold);box-shadow:2px 2px 0 rgba(26,26,26,.25)}
+  .nav-badge{background:var(--lost);color:#fff;font-size:10.5px;font-weight:800;min-width:17px;height:17px;border-radius:99px;display:inline-flex;align-items:center;justify-content:center;padding:0 4px}
+  .spacer{flex:1}
+  .btn{background:var(--gold);color:var(--ink);border:1.5px solid var(--ink);padding:9px 18px;border-radius:9px;font-weight:800;font-size:13px;cursor:pointer;box-shadow:2px 2px 0 var(--ink)}
+  .btn:hover{filter:brightness(1.05);transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--ink)}
+  .btn.ghost{background:var(--card);color:var(--ink);border:1.5px solid var(--ink);box-shadow:2px 2px 0 var(--ink)}
+  main{padding:24px 28px}
+
+  /* ---------- stats ---------- */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:22px}
+  .stat{background:var(--card);border:1.5px solid var(--ink);border-radius:14px;padding:16px 18px;box-shadow:3px 3px 0 var(--ink);position:relative;overflow:hidden}
+  .stat::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#6c7bd6,#ffc107)}
+  .stat .lbl{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+  .stat .val{font-size:26px;font-weight:800;margin-top:6px}
+  .stat .sub{font-size:12px;color:var(--muted);margin-top:3px}
+
+  /* ---------- board ---------- */
+  .board{display:flex;gap:14px;overflow-x:auto;padding-bottom:20px;align-items:flex-start}
+  .col{min-width:264px;width:264px;background:#efece3;border:1px solid var(--ink);border-radius:14px;flex-shrink:0}
+  .col-head{padding:12px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);position:relative}
+  .col-dot{width:9px;height:9px;border-radius:50%}
+  .col-title{font-weight:800;font-size:13px;flex:1}
+  .col-count{background:#fff;border:1px solid var(--border);font-size:11px;font-weight:700;padding:1px 8px;border-radius:99px;color:var(--muted)}
+  .col-value{font-size:11px;color:var(--muted);padding:0 14px 8px}
+  .cards{padding:10px;display:flex;flex-direction:column;gap:8px;min-height:60px;max-height:calc(100vh - 320px);overflow-y:auto}
+  .col.drag-over .cards{outline:2px dashed var(--accent);outline-offset:-4px;border-radius:10px;background:var(--accent-soft)}
+  .lead-card{background:var(--card);border:1.5px solid var(--ink);border-radius:11px;padding:11px 12px;cursor:grab;box-shadow:2px 2px 0 rgba(26,26,26,.18);transition:transform .12s ease,box-shadow .12s ease}
+  .lead-card:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 rgba(26,26,26,.3)}
+  .lead-card.dragging{opacity:.45;transform:rotate(2deg)}
+  .lc-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+  .lc-name{font-weight:700;font-size:13.5px}
+  .lc-co{font-size:11.5px;color:var(--muted);margin-top:2px}
+  .lc-tag{font-size:10px;font-weight:800;padding:2px 8px;border-radius:99px;letter-spacing:.03em;flex-shrink:0;border:1px solid rgba(26,26,26,.25)}
+  .lc-meta{display:flex;gap:10px;margin-top:8px;font-size:11.5px;color:var(--muted);flex-wrap:wrap}
+  .lc-meta b{color:var(--ink)}
+  .lc-days{margin-top:7px;font-size:10.5px;color:var(--muted);display:flex;justify-content:space-between}
+  .old{color:var(--lost);font-weight:700}
+  .add-card-btn{width:100%;background:none;border:1.5px dashed #b8b29c;border-radius:10px;padding:8px;color:var(--muted);font-weight:600;font-size:12px;cursor:pointer;margin-bottom:2px}
+  .add-card-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+  /* ---------- auth ---------- */
+  #auth-screen{position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;gap:56px;background:linear-gradient(135deg,#6c7bd6 0%,#b3a8cf 48%,#ffc107 100%);flex-wrap:wrap;padding:24px}
+  #auth-screen.hidden{display:none}
+  .auth-hero{color:#fff;max-width:420px;text-shadow:0 1px 8px rgba(26,26,26,.35)}
+  .auth-hero .hi{font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#fff;opacity:.9;margin-bottom:10px}
+  .auth-hero h1{font-size:34px;line-height:1.15;font-weight:800;margin-bottom:14px}
+  .auth-hero h1 em{font-style:normal;color:var(--gold)}
+  .auth-hero p{font-size:15px;line-height:1.6;opacity:.95;margin-bottom:18px}
+  .auth-hero ul{list-style:none;font-size:13.5px;line-height:2;opacity:.95}
+  .auth-hero li::before{content:'✔';margin-right:9px;font-weight:800;color:#fff}
+  .auth-card{background:var(--card);border:2px solid var(--ink);border-radius:18px;box-shadow:8px 8px 0 rgba(26,26,26,.8);width:400px;max-width:92vw;padding:32px}
+  .auth-card .auth-logo{display:block;margin:0 auto 6px;height:58px}
+  .auth-card h2{text-align:center;font-size:20px;margin-bottom:4px}
+  .auth-card .auth-sub{text-align:center;font-size:12.5px;color:var(--muted);margin-bottom:20px}
+  .auth-err{background:#fadcdc;color:#a12b2b;border:1.5px solid var(--lost);border-radius:9px;padding:8px 12px;font-size:12.5px;font-weight:700;margin-bottom:12px;display:none}
+  .auth-ok{background:#ddf2e6;color:#1e6b44;border:1.5px solid var(--won);border-radius:9px;padding:8px 12px;font-size:12.5px;font-weight:700;margin-bottom:12px;display:none}
+  .auth-links{margin-top:16px;text-align:center;font-size:12.5px}
+  .auth-links a{color:var(--accent);font-weight:700;cursor:pointer;text-decoration:underline}
+  .auth-note{margin-top:18px;font-size:11px;color:var(--muted);text-align:center;line-height:1.5}
+  .userchip{display:flex;align-items:center;gap:8px;background:#efece3;border:1.5px solid var(--ink);border-radius:99px;padding:5px 6px 5px 14px;font-size:12.5px;font-weight:700}
+  .userchip button{background:var(--ink);color:var(--gold);border:none;border-radius:99px;padding:5px 12px;font-weight:800;font-size:11.5px;cursor:pointer;font-family:inherit}
+
+  /* ---------- daily alert ---------- */
+  .daily-alert{grid-column:span 12;background:var(--ink);color:#fff;border-radius:14px;padding:18px 20px;box-shadow:4px 4px 0 rgba(26,26,26,.3);border:2px solid var(--ink)}
+  .daily-alert h3{color:var(--gold);font-size:15px;display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .daily-item{display:flex;gap:12px;align-items:flex-start;padding:9px 0;border-top:1px solid rgba(255,255,255,.14)}
+  .daily-item .d-time{flex-shrink:0;background:var(--gold);color:var(--ink);font-weight:800;font-size:11px;padding:3px 10px;border-radius:99px;margin-top:1px}
+  .daily-item.d-now .d-time{background:var(--lost);color:#fff}
+  .daily-item .d-body{font-size:13px;line-height:1.5}
+  .daily-item .d-body b{color:var(--gold)}
+  .daily-item .d-sub{font-size:11.5px;color:rgba(255,255,255,.65);margin-top:2px}
+
+  /* ---------- modal ---------- */
+  .overlay{position:fixed;inset:0;background:rgba(13,15,26,.5);display:none;align-items:center;justify-content:center;z-index:100;padding:20px}
+  .overlay.open{display:flex}
+  .modal{background:var(--card);border:2px solid var(--ink);border-radius:16px;width:480px;max-width:100%;max-height:90vh;overflow-y:auto;padding:24px;box-shadow:6px 6px 0 rgba(13,15,26,.85)}
+  .modal h2{font-size:17px;margin-bottom:18px}
+  .field{margin-bottom:13px}
+  .field label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:5px}
+  .field input,.field select,.field textarea{width:100%;border:1px solid var(--border);border-radius:9px;padding:9px 11px;font-size:13.5px;font-family:inherit;background:#fbfcfd}
+  .field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+  .danger-link{color:var(--lost);background:none;border:none;font-size:12.5px;font-weight:700;cursor:pointer;margin-right:auto}
+
+  /* ---------- analytics ---------- */
+  .analytics{display:none;grid-template-columns:repeat(12,1fr);gap:16px}
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;box-shadow:var(--shadow)}
+  .panel h3{font-size:13.5px;margin-bottom:14px}
+  .p6{grid-column:span 6}.p12{grid-column:span 12}.p4{grid-column:span 4}.p8{grid-column:span 8}
+  @media(max-width:900px){.p6,.p4,.p8{grid-column:span 12}}
+  .funnel-row{display:flex;align-items:center;gap:12px;margin-bottom:9px}
+  .funnel-label{width:96px;font-size:12px;font-weight:700;color:var(--muted);text-align:right;flex-shrink:0}
+  .funnel-bar-wrap{flex:1;height:30px;background:#efece3;border-radius:7px;overflow:hidden}
+  .funnel-bar{height:100%;border-radius:7px;display:flex;align-items:center;padding-left:10px;color:#fff;font-size:11.5px;font-weight:800;transition:width .5s ease;white-space:nowrap}
+  .conv-note{font-size:11px;color:var(--muted);width:70px;flex-shrink:0}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding:7px 8px;border-bottom:1px solid var(--border)}
+  td{padding:9px 8px;border-bottom:1px solid #efece3}
+  tr:last-child td{border-bottom:none}
+  .bar-h{height:22px;border-radius:6px;display:inline-block;vertical-align:middle;min-width:4px}
+  .legend-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+  .empty{color:var(--muted);font-size:13px;padding:24px;text-align:center}
+</style>
+</head>
+<body>
+<div id="auth-screen">
+  <div class="auth-hero">
+    <div class="hi">Welcome, Chris McShanag 👋</div>
+    <h1>This is your handy <em>Lead CRM</em> — so you'll never miss a deal.</h1>
+    <p>Every lead, follow-up and close in one place. Your Sales Coach builds your action plan for the day — nothing slips through.</p>
+    <ul>
+      <li>Drag-and-drop pipeline: Leads → Clients</li>
+      <li>Daily alerts on who to contact and when</li>
+      <li>Live analytics &amp; win-rate tracking</li>
+      <li>One-click export to Google Sheets</li>
+    </ul>
+  </div>
+  <div class="auth-card">
+    <img class="auth-logo" src="assets/logo.png" alt="Virtual Teammate">
+    <!-- LOGIN -->
+    <div id="auth-login">
+      <h2>Lead CRM</h2>
+      <div class="auth-sub">Sign in to your workspace</div>
+      <div class="auth-err" id="login-err"></div>
+      <form onsubmit="doLogin(event)">
+        <div class="field"><label>Email</label><input id="li-email" type="email" required placeholder="you@virtualteammate.com"></div>
+        <div class="field"><label>Password</label><input id="li-pass" type="password" required placeholder="••••••••"></div>
+        <button class="btn" style="width:100%;margin-top:6px">Sign In</button>
+      </form>
+      <div class="auth-links"><a onclick="showAuth('forgot')">Forgot password?</a> · First time? <a onclick="showAuth('signup')">Create account</a></div>
+    </div>
+    <!-- SIGNUP -->
+    <div id="auth-signup" style="display:none">
+      <h2>Create Account</h2>
+      <div class="auth-sub">Set up your CRM credentials</div>
+      <div class="auth-err" id="signup-err"></div>
+      <form onsubmit="doSignup(event)">
+        <div class="field"><label>Full Name</label><input id="su-name" required placeholder="Jane Doe"></div>
+        <div class="field"><label>Email</label><input id="su-email" type="email" required placeholder="you@virtualteammate.com"></div>
+        <div class="field"><label>Recovery Email (optional)</label><input id="su-rec" type="email" placeholder="backup@email.com"></div>
+        <div class="field"><label>Password (min 6 chars)</label><input id="su-pass" type="password" required minlength="6" placeholder="••••••••"></div>
+        <div class="field"><label>Confirm Password</label><input id="su-pass2" type="password" required minlength="6" placeholder="••••••••"></div>
+        <button class="btn" style="width:100%;margin-top:6px">Create Account</button>
+      </form>
+      <div class="auth-links">Already registered? <a onclick="showAuth('login')">Sign in</a></div>
+    </div>
+    <!-- FORGOT -->
+    <div id="auth-forgot" style="display:none">
+      <h2>Reset Password</h2>
+      <div class="auth-sub">Verify your identity to set a new password</div>
+      <div class="auth-err" id="forgot-err"></div>
+      <div class="auth-ok" id="forgot-ok"></div>
+      <form onsubmit="doReset(event)">
+        <div class="field"><label>Account Email</label><input id="fg-email" type="email" required placeholder="you@virtualteammate.com"></div>
+        <div class="field"><label>Recovery Email (if set)</label><input id="fg-rec" type="email" placeholder="backup@email.com"></div>
+        <div class="field"><label>New Password (min 6 chars)</label><input id="fg-pass" type="password" required minlength="6" placeholder="••••••••"></div>
+        <div class="field"><label>Confirm New Password</label><input id="fg-pass2" type="password" required minlength="6" placeholder="••••••••"></div>
+        <button class="btn" style="width:100%;margin-top:6px">Reset Password</button>
+      </form>
+      <div class="auth-links"><a onclick="showAuth('login')">← Back to sign in</a></div>
+    </div>
+    <div class="auth-note">Accounts are stored locally on this device.<br>Passwords are hashed — nobody can read them, not even this app.</div>
+  </div>
+</div>
+<div class="grad-strip"></div>
+<header>
+  <div class="logo"><img class="logo-img" src="assets/logo.png" alt="Virtual Teammate"></div>
+  <nav>
+    <button id="nav-board" class="active" onclick="setView('board')">Pipeline</button>
+    <button id="nav-analytics" onclick="setView('analytics')">Analytics</button>
+    <button id="nav-coach" onclick="setView('coach')">Sales Coach <span class="nav-badge" id="coach-badge" style="display:none"></span></button>
+  </nav>
+  <div class="spacer"></div>
+  <div style="position:relative">
+    <button class="btn ghost" onclick="toggleExportMenu(event)">⬇ Export ▾</button>
+    <div id="export-menu" style="display:none;position:absolute;right:0;top:110%;background:#fff;border:1px solid var(--border);border-radius:11px;box-shadow:var(--shadow);min-width:250px;padding:6px;z-index:99">
+      <button onclick="copyForSheets()" style="display:block;width:100%;text-align:left;background:none;border:none;padding:10px 12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">📋 Copy for Google Sheets<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">One click, then Ctrl+V in any sheet</span></button>
+      <button onclick="openBlankSheet()" style="display:block;width:100%;text-align:left;background:none;border:none;padding:10px 12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">🟩 New blank Google Sheet<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">Opens sheets.new — paste right in</span></button>
+      <button onclick="downloadCSV()" style="display:block;width:100%;text-align:left;background:none;border:none;padding:10px 12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">📄 Download CSV file<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">Leads + summary in one file</span></button>
+      <button onclick="downloadSplitCSV()" style="display:block;width:100%;text-align:left;background:none;border:none;padding:10px 12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">🗂️ Download 2 separate CSVs<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">leads.csv + summary.csv (one tab each)</span></button>
+    </div>
+  </div>
+  <button class="btn" onclick="openModal()">+ New Lead</button>
+</header>
+
+<main>
+  <section id="view-board">
+    <div class="stats" id="stats"></div>
+    <div class="board" id="board"></div>
+  </section>
+
+  <section id="view-analytics" class="analytics">
+    <div class="panel p12"><h3>Pipeline Funnel — lead count & conversion by stage</h3><div id="funnel"></div></div>
+    <div class="panel p6"><h3>Deal Value by Stage</h3><table id="value-table"></table></div>
+    <div class="panel p6"><h3>Leads by Source</h3><div id="sources"></div></div>
+    <div class="panel p8"><h3>Stage Aging — average days in current stage</h3><div id="aging"></div></div>
+    <div class="panel p4"><h3>Key Rates</h3><div id="rates"></div></div>
+  </section>
+
+  <section id="view-coach" class="analytics">
+    <div class="daily-alert p12" id="daily-alert"></div>
+    <div class="panel p12" id="coach-summary"></div>
+    <div id="coach-list" style="grid-column:span 12;display:grid;gap:14px"></div>
+  </section>
+</main>
+
+<!-- Lead Modal -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h2 id="modal-title">New Lead</h2>
+    <form onsubmit="saveLead(event)">
+      <input type="hidden" id="f-id">
+      <div class="row2">
+        <div class="field"><label>Contact Name *</label><input id="f-name" required placeholder="e.g. Dr. Sarah Kim"></div>
+        <div class="field"><label>Practice / Company</label><input id="f-company" placeholder="e.g. Healthspan Clinic"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Email</label><input id="f-email" type="email" placeholder="name@practice.com"></div>
+        <div class="field"><label>Phone</label><input id="f-phone" placeholder="+1 ..."></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Role Needed</label><select id="f-role">
+          <option>Medical Biller / RCM</option><option>Medical Receptionist</option>
+          <option>Medical Scribe</option><option>Dental Biller</option>
+          <option>Dental Coordinator</option><option>Medical Admin Support</option><option>Other</option>
+        </select></div>
+        <div class="field"><label>Source</label><select id="f-source">
+          <option>Website</option><option>Instant Audit</option><option>Referral</option>
+          <option>Google Ads</option><option>Cold Outreach</option><option>Event</option>
+        </select></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Est. Deal Value ($/mo)</label><input id="f-value" type="number" min="0" step="50" placeholder="2500"></div>
+        <div class="field"><label>Stage</label><select id="f-stage"></select></div>
+      </div>
+      <div class="field"><label>Notes</label><textarea id="f-notes" rows="3" placeholder="Context, pain points, next steps..."></textarea></div>
+      <div class="modal-actions">
+        <button type="button" class="danger-link" id="btn-delete" onclick="deleteLead()" style="display:none">Delete lead</button>
+        <button type="button" class="btn ghost" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn">Save Lead</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+const STAGES = [
+  {id:'Leads',       color:'var(--leads)'},
+  {id:'MQLs',        color:'var(--mql)'},
+  {id:'SQLs',        color:'var(--sql)'},
+  {id:'Deals',       color:'var(--deals)'},
+  {id:'Closed Won',  color:'var(--won)'},
+  {id:'Closed Lost', color:'var(--lost)'},
+  {id:'Client',      color:'var(--client)'},
+];
+const CLOSED = ['Closed Won','Closed Lost'];
+const LS_KEY = 'vt_lead_crm_v1';
+
+let leads = load();
+
+function load(){
+  const saved = localStorage.getItem(LS_KEY);
+  if(saved) return JSON.parse(saved);
+  return [
+    {id:1,name:"Dr. Amara Osei",company:"RM Wellness Clinic",email:"aosei@rmwellness.com",phone:"+1 720-555-0134",role:"Medical Biller / RCM",source:"Instant Audit",value:2800,stage:"SQLs",entered:{SQLs:Date.now()-4*864e5},notes:"AR days at 52. Wants dedicated biller + scribe.",created:Date.now()-21*864e5},
+    {id:2,name:"James Whitfield",company:"Endo Valley Endodontics",email:"james@endovalley.com",phone:"+1 208-555-0177",role:"Dental Biller",source:"Google Ads",value:2200,stage:"Deals",entered:{Deals:Date.now()-2*864e5},notes:"Proposal sent — 2 FTE dental billers. Reviewing with partner.",created:Date.now()-35*864e5},
+    {id:3,name:"Priya Raman",company:"Healthspan Medspa",email:"priya@healthspan.io",phone:"+1 305-555-0192",role:"Medical Receptionist",source:"Website",value:1900,stage:"MQLs",entered:{MQLs:Date.now()-6*864e5},notes:"Downloaded pricing guide, booked audit call.",created:Date.now()-9*864e5},
+    {id:4,name:"Tom Beasley",company:"Ohana Family Practice",email:"tom@ohanafp.com",phone:"+1 808-555-0110",role:"Medical Admin Support",source:"Referral",value:2400,stage:"Client",entered:{Client:Date.now()-40*864e5},notes:"Teammate live since June. Very happy — referral source for 2 new leads.",created:Date.now()-95*864e5},
+    {id:5,name:"Lena Cruz",company:"Prostate Cancer USA",email:"lena@pcusa.org",phone:"+1 615-555-0166",role:"Medical Scribe",source:"Cold Outreach",value:2600,stage:"Won",notes:"",created:Date.now()-60*864e5},
+    {id:6,name:"Mark Delaney",company:"Synergy HomeCare",email:"mark@synergyhc.com",phone:"+1 480-555-0143",role:"Other",source:"Event",value:1500,stage:"Leads",entered:{Leads:Date.now()},notes:"Met at HIMSS booth. Needs front-office coverage.",created:Date.now()},
+    {id:7,name:"Dr. Fatima Nasser",company:"LifeQuest Primary Care",email:"fnasser@lifequest.com",phone:"+1 469-555-0188",role:"Medical Biller / RCM",source:"Instant Audit",value:3100,stage:"Won",notes:"",created:Date.now()-75*864e5},
+    {id:8,name:"Greg Holt",company:"Being True To You",email:"greg@btty.com",phone:"+1 612-555-0121",role:"Dental Coordinator",source:"Website",value:1700,stage:"Lost",notes:"Went with local temp agency — price sensitive.",created:Date.now()-50*864e5},
+    {id:9,name:"Alicia Moreno",company:"Bright Smile Pediatric Dental",email:"alicia@brightsmile.com",phone:"+1 813-555-0102",role:"Dental Biller",source:"Referral",value:2100,stage:"SQLs",entered:{SQLs:Date.now()-11*864e5},notes:"No-show rate 22%. Discovery call done, scoping coordinator role.",created:Date.now()-30*864e5},
+  ];
+}
+function save(){ localStorage.setItem(LS_KEY, JSON.stringify(leads)); }
+
+// normalize legacy stage names from seeds
+function norm(s){
+  if(STAGES.some(x=>x.id===s)) return s;
+  return {'Won':'Closed Won','Lost':'Closed Lost'}[s] || 'Leads';
+}
+leads.forEach(l=>l.stage=norm(l.stage));
+
+function uid(){ return Date.now()+Math.floor(Math.random()*999); }
+function daysIn(stage,l){
+  if(l.entered && l.entered[stage]) return Math.max(0,Math.round((Date.now()-l.entered[stage])/864e5));
+  return Math.max(0,Math.round((Date.now()-(l.created||Date.now()))/864e5));
+}
+function money(n){ return '$'+Number(n||0).toLocaleString(); }
+function tagStyle(stage){
+  const map={'Leads':'#ece9e0,#3f4354','MQLs':'#e9ecf8,#46539b','SQLs':'#d6dbf2,#33406f','Deals':'#fdf0c2,#8a6208','Closed Won':'#ddf2e6,#1e6b44','Closed Lost':'#fadcdc,#a12b2b','Client':'#1a1a1a,#ffc107'};
+  const [bg,fg]=map[stage].split(',');return `background:${bg};color:${fg}`;
+}
+function colDot(stage){ return getComputedStyle(document.documentElement).getPropertyValue('--'+stage.toLowerCase().replace(/ /g,'-')).trim() || '#888'; }
+
+/* ---------------- render board ---------------- */
+function renderBoard(){
+  const board=document.getElementById('board');
+  board.innerHTML='';
+  STAGES.forEach(st=>{
+    const items=leads.filter(l=>l.stage===st.id);
+    const total=items.reduce((s,l)=>s+(+l.value||0),0);
+    const col=document.createElement('div');col.className='col';col.dataset.stage=st.id;
+    col.innerHTML=`<div class="col-head"><span class="col-dot" style="background:${st.color}"></span>
+      <span class="col-title">${st.id}</span><span class="col-count">${items.length}</span></div>
+      <div class="col-value">${total?money(total)+'/mo':''}</div>
+      <div class="cards" data-stage="${st.id}">
+        <button class="add-card-btn" onclick="openModal(null,'${st.id}')">+ Add</button>
+      </div>`;
+    const wrap=col.querySelector('.cards');
+    items.sort((a,b)=>daysIn(st.id,a)-daysIn(st.id,b)).forEach(l=>{
+      const d=daysIn(st.id,l);
+      const card=document.createElement('div');card.className='lead-card';card.draggable=true;card.dataset.id=l.id;
+      card.innerHTML=`<div class="lc-top"><div><div class="lc-name">${esc(l.name)}</div>
+        ${l.company?`<div class="lc-co">${esc(l.company)}</div>`:''}</div>
+        <span class="lc-tag" style="${tagStyle(st.id)}">${shortRole(l.role)}</span></div>
+        <div class="lc-meta">${l.value?`<span><b>${money(l.value)}</b>/mo</span>`:''}${l.source?`<span>· ${esc(l.source)}</span>`:''}</div>
+        <div class="lc-days"><span>${st.id==='Client'?esc((l.role||'').split(' ')[0]+' teammate'):''}</span>
+        <span class="${(!CLOSED.includes(st.id)&&d>14)?'old':''}">${d}d in stage${!CLOSED.includes(st.id)&&d>14?' ⚠':''}</span></div>`;
+      card.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain',l.id);card.classList.add('dragging')});
+      card.addEventListener('dragend',()=>card.classList.remove('dragging'));
+      card.addEventListener('click',()=>openModal(l));
+      wrap.appendChild(card);
+    });
+    // drop targets
+    [col,wrap].forEach(el=>{
+      el.addEventListener('dragover',e=>{e.preventDefault();col.classList.add('drag-over')});
+      el.addEventListener('dragleave',e=>{if(e.target===el)col.classList.remove('drag-over')});
+      el.addEventListener('drop',e=>{
+        e.preventDefault();col.classList.remove('drag-over');
+        moveLead(+e.dataTransfer.getData('text/plain'), st.id);
+      });
+    });
+    board.appendChild(col);
+  });
+  renderStats();
+}
+
+function shortRole(r){ return r==='Medical Biller / RCM'?'BILLER':r.replace('Medical ','').replace('Dental ','').replace(' Administrative',' ADMIN').toUpperCase().slice(0,9); }
+function esc(s){ const d=document.createElement('div');d.textContent=s??'';return d.innerHTML; }
+
+function moveLead(id,toStage){
+  const l=leads.find(x=>x.id===id); if(!l||l.stage===toStage)return;
+  l.stage=toStage;
+  l.entered=l.entered||{}; l.entered[toStage]=Date.now();
+  save();renderBoard();
+  flash(`"${l.name}" moved to ${toStage}`);
+}
+function flash(msg){
+  const t=document.createElement('div');t.textContent=msg;
+  t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#ffc107;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:600;z-index:200;box-shadow:4px 4px 0 rgba(26,26,26,.35)';
+  document.body.appendChild(t);setTimeout(()=>t.remove(),2200);
+}
+
+/* ---------------- stats strip ---------------- */
+function renderStats(){
+  const won=leads.filter(l=>l.stage==='Closed Won'||l.stage==='Client');
+  const lost=leads.filter(l=>l.stage==='Closed Lost');
+  const open=leads.filter(l=>!CLOSED.concat('Client').includes(l.stage));
+  const mrr=won.reduce((s,l)=>s+(+l.value||0),0);
+  const wr=(won.length+lost.length)?Math.round(won.length/(won.length+lost.length)*100):0;
+  document.getElementById('stats').innerHTML=`
+    <div class="stat"><div class="lbl">Open Pipeline</div><div class="val">${open.length}</div><div class="sub">active leads</div></div>
+    <div class="stat"><div class="lbl">Open Value</div><div class="val">${money(open.reduce((s,l)=>s+(+l.value||0),0))}</div><div class="sub">per month</div></div>
+    <div class="stat"><div class="lbl">Clients</div><div class="val">${leads.filter(l=>l.stage==='Client').length}</div><div class="sub">${money(mrr)}/mo MRR</div></div>
+    <div class="stat"><div class="lbl">Win Rate</div><div class="val">${wr}%</div><div class="sub">${won.length} won vs ${lost.length} lost</div></div>
+    <div class="stat"><div class="lbl">Needs Attention</div><div class="val" style="color:${open.filter(l=>daysIn(l.stage,l)>14).length?'var(--lost)':'inherit'}">${open.filter(l=>daysIn(l.stage,l)>14).length}</div><div class="sub">stalled &gt; 14 days</div></div>`;
+}
+
+/* ---------------- modal ---------------- */
+let editingId=null;
+function openModal(lead=null,presetStage=null){
+  editingId=lead?lead.id:null;
+  document.getElementById('modal-title').textContent=lead?'Edit Lead':'New Lead';
+  document.getElementById('btn-delete').style.display=lead?'':'none';
+  const sel=document.getElementById('f-stage');
+  sel.innerHTML=STAGES.map(s=>`<option>${s.id}</option>`).join('');
+  const g=id=>document.getElementById(id);
+  g('f-id').value='';g('f-name').value=lead?.name||'';g('f-company').value=lead?.company||'';
+  g('f-email').value=lead?.email||'';g('f-phone').value=lead?.phone||'';g('f-role').value=lead?.role||g('f-role').options[0].value;
+  g('f-source').value=lead?.source||g('f-source').options[0].value;
+  g('f-value').value=lead?.value??'';g('f-notes').value=lead?.notes||'';
+  sel.value=presetStage||lead?.stage||'Leads';
+  document.getElementById('overlay').classList.add('open');
+  setTimeout(()=>g('f-name').focus(),50);
+}
+function closeModal(){document.getElementById('overlay').classList.remove('open')}
+document.getElementById('overlay').addEventListener('click',e=>{if(e.target.id==='overlay')closeModal()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
+
+function saveLead(e){
+  e.preventDefault();
+  const g=id=>document.getElementById(id).value.trim();
+  const stage=g('f-stage');
+  if(editingId){
+    const l=leads.find(x=>x.id===editingId);
+    if(l.stage!==stage){l.entered=l.entered||{};l.entered[stage]=Date.now();}
+    Object.assign(l,{name:g('f-name'),company:g('f-company'),email:g('f-email'),phone:g('f-phone'),
+      role:g('f-role'),source:g('f-source'),value:+g('f-value')||0,stage,notes:g('f-notes')});
+  }else{
+    leads.push({id:uid(),name:g('f-name'),company:g('f-company'),email:g('f-email'),phone:g('f-phone'),
+      role:g('f-role'),source:g('f-source'),value:+g('f-value')||0,stage,
+      entered:{[stage]:Date.now()},notes:g('f-notes'),created:Date.now()});
+  }
+  save();closeModal();renderBoard();flash(editingId?'Lead updated':'Lead added');
+}
+function deleteLead(){
+  if(!confirm('Delete this lead permanently?'))return;
+  leads=leads.filter(l=>l.id!==editingId);save();closeModal();renderBoard();flash('Lead deleted');
+}
+
+/* ---------------- analytics ---------------- */
+function setView(v){
+  document.getElementById('view-board').style.display=v==='board'?'':'none';
+  document.getElementById('view-analytics').style.display=v==='analytics'?'grid':'none';
+  document.getElementById('view-coach').style.display=v==='coach'?'grid':'none';
+  document.getElementById('nav-board').classList.toggle('active',v==='board');
+  document.getElementById('nav-analytics').classList.toggle('active',v==='analytics');
+  document.getElementById('nav-coach').classList.toggle('active',v==='coach');
+  if(v==='analytics')renderAnalytics();
+  if(v==='coach')renderCoach();
+}
+
+/* ---------------- Sales Coach ---------------- */
+// Recommended follow-up cadence (max days without touch) per stage
+const CADENCE = {'Leads':3,'MQLs':5,'SQLs':7,'Deals':4,'Client':30};
+
+function coachAdvice(l){
+  const d=daysIn(l.stage,l);
+  const cad=CADENCE[l.stage]??7;
+  const overdue=d-cad;
+  const acts=[];
+  let urgency='ok'; // ok | soon | now
+
+  // stalled?
+  if(!CLOSED.includes(l.stage) && overdue>0){
+    urgency = overdue>=cad ? 'now' : 'soon';
+    const byStage={
+      'Leads':`Call within 48h of first contact — leads go cold fast. Qualify: practice size, roles they're hiring for, who decides. If no answer, email + LinkedIn touch today.`,
+      'MQLs':`They raised a hand — strike while hot. Offer the Instant Audit as the hook: "Want me to run the numbers on what a biller/teammate could recover for you?" Book the audit call this week.`,
+      'SQLs':`Qualified — now scope it. Confirm exact role, EHR, hours, start date. Send a shortlist preview to create pull, then set a concrete next-meeting date before you hang up.`,
+      'Deals':`Proposal is out — don't let it drift. Ask directly about timeline and decision-makers, surface objections now (price? fit? timing?), and offer the 30-Day Right-Fit Promise to de-risk the yes.`,
+    };
+    acts.push({icon:'📞',title:`Follow-up OVERDUE (${d}d in ${l.stage}, target ≤${cad}d)`,body:byStage[l.stage]||'Reach out today.'});
+  } else if(!CLOSED.includes(l.stage)){
+    acts.push({icon:'✅',title:`On pace (${d}d in stage, target ≤${cad}d)`,body:`Next touch due in ${cad-d} day(s). Keep momentum: confirm the agreed next step on every interaction.`});
+  }
+
+  // value-based priority
+  if(l.value>=2500 && !CLOSED.includes(l.stage)) acts.push({icon:'💎',title:'High-value lead ($'+l.value+'/mo)',body:'Prioritize over smaller deals — consider involving a senior closer or the founder on the next call.'});
+  if(l.value<1500 && l.stage==='Leads' && d>10) acts.push({icon:'⚖️',title:'Low value + aging',body:'Send one break-up email ("Should I close your file?") — responses often revive the deal cheaply.'});
+
+  // referral engine
+  if(l.stage==='Client'){
+    if((l.notes||'').toLowerCase().includes('referral')) acts.push({icon:'🌟',title:'Referral source!',body:'Ask for 1–2 intros this month while satisfaction is high; consider a referral credit.'});
+    if(daysIn('Client',l)>30) acts.push({icon:'📈',title:'Past Right-Fit window',body:'Check-in call: results so far, expansion seats (scribe? coordinator?), and a case-study/testimonial ask.'});
+  }
+
+  // closed stages
+  if(l.stage==='Closed Won') acts.push({icon:'🎉',title:'Won — onboard now',body:'Kick off matching within 2 business days (Right-Fit Promise). After go-live ~30 days, convert to Client once producing.'});
+  if(l.stage==='Closed Lost'){
+    const warm=(l.notes||'').match(/price|budget|cost|timing/i);
+    acts.push(warm?{icon:'🔁',title:'Lost on price/timing — recyclable',body:'Re-engage in 60–90 days with a new angle (smaller seat, part-time teammate). Set a reminder today.'}
+                  :{icon:'🗄️',title:'Closed lost',body:'Log the real loss reason in Notes so Analytics improves. Nurture quarterly via newsletter.'});
+  }
+
+  // missing info
+  if(!l.phone&&!l.email) {urgency=urgency==='now'?'now':'soon';acts.push({icon:'🧩',title:'No contact method on file',body:'Capture phone/email before any outreach plan matters — edit the lead card.'});}
+
+  return {acts,urgency,due:!CLOSED.includes(l.stage)?overdue>0?0:cad-d:null};
+}
+
+function renderCoach(){
+  const open=leads.filter(l=>!['Closed Lost'].includes(l.stage));
+  const scored=open.map(l=>({l,...coachAdvice(l)}));
+  scored.forEach(s=>{s.prio=(s.urgency==='now'?100:s.urgency==='soon'?50:0)+(s.l.value>=2500?20:+s.l.value/500)});
+  scored.sort((a,b)=>b.prio-a.prio);
+
+  const nowN=scored.filter(s=>s.urgency==='now').length;
+  const soonN=scored.filter(s=>s.urgency==='soon').length;
+  document.getElementById('coach-summary').innerHTML=`<h3>Today's Coaching Brief</h3>
+   <div style="display:flex;gap:14px;flex-wrap:wrap">
+    <div style="flex:1;min-width:160px;background:${nowN?'#fadcdc':'#ddf2e6'};border-radius:11px;padding:14px">
+      <div style="font-size:26px;font-weight:800;color:${nowN?'var(--lost)':'var(--won)'}">${nowN}</div>
+      <div style="font-size:12px;font-weight:700">follow-ups DUE NOW</div></div>
+    <div style="flex:1;min-width:160px;background:#fdeecb;border-radius:11px;padding:14px">
+      <div style="font-size:26px;font-weight:800;color:#b45309">${soonN}</div>
+      <div style="font-size:12px;font-weight:700">due within cadence</div></div>
+    <div style="flex:2.2;min-width:260px;padding:6px 4px;font-size:13px;line-height:1.55;color:var(--muted)">
+      ${nowN?'Start at the top red card — that deal is decaying daily. ':'Nothing overdue — use the spare time on high-value 💎 leads and Client check-ins. '}
+      Cadence targets: Lead <b>3d</b> · MQL <b>5d</b> · SQL <b>7d</b> · Deal <b>4d</b>. Every touch should end with a scheduled next step.</div>
+   </div>`;
+
+  document.getElementById('coach-list').innerHTML=scored.map(({l,acts,urgency})=>`
+    <div class="panel" style="border-left:5px solid ${urgency==='now'?'var(--lost)':urgency==='soon'?'var(--deals)':'var(--won)'}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px">
+        <div><span style="font-weight:800;font-size:15px">${esc(l.name)}</span>
+          ${l.company?`<span style="color:var(--muted)"> · ${esc(l.company)}</span>`:''}</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">
+          <span class="lc-tag" style="${tagStyle(l.stage)}">${l.stage}</span>
+          <button class="btn ghost" style="padding:5px 12px;font-size:12px" onclick="openModal(leads.find(x=>x.id===${l.id}))">Open lead</button>
+        </div>
+      </div>
+      ${acts.map(a=>`<div style="display:flex;gap:10px;padding:7px 0;border-top:1px solid #efece3">
+        <span style="font-size:16px">${a.icon}</span>
+        <div><div style="font-weight:700;font-size:13px">${a.title}</div>
+        <div style="font-size:12.5px;color:var(--muted);margin-top:2px;line-height:1.45">${a.body}</div></div></div>`).join('')}
+    </div>`).join('')||'<div class="empty panel">No active leads yet — add some on the Pipeline board.</div>';
+}
+
+function renderAnalytics(){
+  // funnel
+  const max=Math.max(...STAGES.map(s=>leads.filter(l=>l.stage===s.id).length),1);
+  document.getElementById('funnel').innerHTML=STAGES.map((st,i)=>{
+    const n=leads.filter(l=>l.stage===st.id).length;
+    let conv='';
+    if(i>0&&i<5){const prev=leads.filter(l=>l.stage===STAGES[i-1].id).length;
+      conv=prev?Math.round(n/prev*100)+'% of prev':'—';}
+    else if(i===5){conv='of closed'}
+    return `<div class="funnel-row"><div class="funnel-label">${st.id}</div>
+      <div class="funnel-bar-wrap"><div class="funnel-bar" style="width:${Math.max(n/max*100,2)}%;background:${st.color}">${n||''}</div></div>
+      <div class="conv-note">${conv}</div></div>`;
+  }).join('');
+
+  // value table
+  document.getElementById('value-table').innerHTML='<tr><th>Stage</th><th>Leads</th><th>Monthly Value</th></tr>'+
+    STAGES.map(st=>{const it=leads.filter(l=>l.stage===st.id);
+      return `<tr><td><span class="legend-dot" style="background:${st.color}"></span>${st.id}</td>
+      <td>${it.length}</td><td><b>${money(it.reduce((s,l)=>s+(+l.value||0),0))}</b>/mo</td></tr>`}).join('');
+
+  // sources
+  const srcs={};leads.forEach(l=>srcs[l.source]=(srcs[l.source]||0)+1);
+  const smax=Math.max(...Object.values(srcs),1);
+  const palette=['#5d6cb1','#6c7bd6','#ffc107','#1a1a1a','#3aa76d','#9498ac'];
+  document.getElementById('sources').innerHTML=Object.entries(srcs).sort((a,b)=>b[1]-a[1]).map(([k,v],i)=>
+    `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+     <div style="width:110px;font-size:12.5px;font-weight:600">${k}</div>
+     <div class="funnel-bar-wrap"><div class="funnel-bar" style="width:${v/smax*100}%;height:26px;background:${palette[i%palette.length]}">${v}</div></div></div>`).join('');
+
+  // aging
+  const openStages=STAGES.filter(s=>!CLOSED.includes(s.id));
+  const amax=Math.max(...openStages.map(s=>{const it=leads.filter(l=>l.stage===s.id);return it.length?it.reduce((x,l)=>x+daysIn(s.id,l),0)/it.length:0}),1);
+  document.getElementById('aging').innerHTML=openStages.map(st=>{
+    const it=leads.filter(l=>l.stage===st.id);
+    const avg=it.length?(it.reduce((x,l)=>x+daysIn(st.id,l),0)/it.length):0;
+    return `<div class="funnel-row"><div class="funnel-label">${st.id}</div>
+      <div class="funnel-bar-wrap"><div class="funnel-bar" style="width:${avg/amax*100}%;height:26px;background:${avg>14?'var(--lost)':st.color}">${it.length?Math.round(avg)+'d avg':''}</div></div>
+      <div class="conv-note">${it.length} lead${it.length===1?'':'s'}</div></div>`}).join('');
+
+  // rates
+  const won=leads.filter(l=>['Closed Won','Client'].includes(l.stage)).length;
+  const lost=leads.filter(l=>l.stage==='Closed Lost').length;
+  const sqlUp=leads.filter(l=>['SQLs','Deals','Closed Won','Closed Lost','Client'].includes(l.stage)).length;
+  const rows=[['Lead → MQL conversion', pct(leads.filter(l=>l.stage!=='Leads').length, leads.length)],
+              ['Lead → SQL conversion', pct(sqlUp,leads.length)],
+              ['Win rate (closed)', pct(won,won+lost)],
+              ['Avg monthly deal size', money(avgVal())],
+              ['Total MRR (clients)', money(leads.filter(l=>l.stage==='Client').reduce((s,l)=>s+(+l.value||0),0))]];
+  document.getElementById('rates').innerHTML=rows.map(([k,v])=>
+    `<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #efece3;font-size:13px">
+     <span style="color:var(--muted);font-weight:600">${k}</span><b style="font-size:15px">${v}</b></div>`).join('');
+}
+function pct(a,b){return b?Math.round(a/b*100)+'%':'—'}
+function avgVal(){const v=leads.filter(l=>l.value);return v.length?Math.round(v.reduce((s,l)=>s+(+l.value),0)/v.length):0}
+
+function openBlankSheet(){window.open('https://sheets.new','_blank');flash('Paste with Ctrl+V in the new sheet');}
+
+const SUM_COLS=['Metric','Value'];
+function summaryRows(){
+  const byStage=st=>leads.filter(l=>l.stage===st);
+  const val=arr=>arr.reduce((s,l)=>s+(+l.value||0),0);
+  const won=[...byStage('Closed Won'),...byStage('Client')];
+  const lost=byStage('Closed Lost');
+  const open=leads.filter(l=>!CLOSED.concat(['Client']).includes(l.stage));
+  const pctS=(a,b)=>b?Math.round(a/b*100)+'%':'—';
+  return [
+    ['REPORT DATE',new Date().toISOString().slice(0,10)],
+    ['',''],
+    ['— PIPELINE BY STAGE —',''],
+    ...STAGES.map(st=>[st.id+' · leads',byStage(st.id).length+' ($'+val(byStage(st.id)).toLocaleString()+'/mo)']),
+    ['',''],
+    ['— KEY METRICS —',''],
+    ['Open pipeline (count)',open.length],
+    ['Open pipeline value','$'+val(open).toLocaleString()+'/mo'],
+    ['Active clients',byStage('Client').length],
+    ['Monthly recurring revenue','$'+val(byStage('Client')).toLocaleString()+'/mo'],
+    ['Win rate',pctS(won.length,won.length+lost.length)+' ('+won.length+'W / '+lost.length+'L)'],
+    ['Avg monthly deal size','$'+avgVal().toLocaleString()],
+    ['Stalled >14 days',open.filter(l=>daysIn(l.stage,l)>14).length],
+    ['',''],
+    ['— CONVERSION FUNNEL —',''],
+    ['Lead → MQL',pctS(leads.length-byStage('Leads').length,leads.length)],
+    ['Lead → SQL',pctS(['SQLs','Deals','Closed Won','Closed Lost','Client'].reduce((s,k)=>s+byStage(k).length,0),leads.length)],
+    ['Lead → Won/Client',pctS(won.length,leads.length)],
+    ['',''],
+    ['— LEADS BY SOURCE —',''],
+    ...Object.entries(leads.reduce((m,l)=>{m[l.source]=(m[l.source]||0)+1;return m},{})).sort((a,b)=>b[1]-a[1]).map(([k,v])=>[k,v]),
+  ];
+}
+function copySummary(){
+  const tsv=[SUM_COLS.join('\t'),...summaryRows().map(r=>r.map(v=>String(v??'').replace(/\t|\r?\n/g,' ')).join('\t'))].join('\n');
+  navigator.clipboard.writeText(tsv).then(()=>flash('Summary copied — paste as a separate tab in Google Sheets'))
+    .catch(()=>{const ta=document.createElement('textarea');ta.value=tsv;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();flash('Summary copied')});
+}
+
+/* ---------------- AUTH (local, hashed) ---------------- */
+const USERS_KEY='vt_crm_users_v1', SESSION_KEY='vt_crm_session_v1';
+async function hashPw(pw,salt){
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(salt+'::'+pw));
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function getUsers(){return JSON.parse(localStorage.getItem(USERS_KEY)||'[]')}
+function setUsers(u){localStorage.setItem(USERS_KEY,JSON.stringify(u))}
+function showAuth(mode){
+  ['login','signup','forgot'].forEach(m=>document.getElementById('auth-'+m).style.display=m===mode?'':'none');
+  ['login-err','signup-err','forgot-err'].forEach(id=>document.getElementById(id).style.display='none');
+  document.getElementById('forgot-ok').style.display='none';
+}
+function authErr(id,msg){const e=document.getElementById(id);e.textContent=msg;e.style.display='block'}
+async function doSignup(e){
+  e.preventDefault();
+  const g=id=>document.getElementById(id).value.trim();
+  if(g('su-pass')!==g('su-pass2'))return authErr('signup-err','Passwords do not match.');
+  const users=getUsers();
+  if(users.some(u=>u.email.toLowerCase()===g('su-email').toLowerCase()))return authErr('signup-err','An account with this email already exists.');
+  const salt=crypto.randomUUID();
+  users.push({name:g('su-name'),email:g('su-email'),recovery:g('su-rec'),
+    salt,hash:await hashPw(g('su-pass'),salt),created:Date.now()});
+  setUsers(users); startSession(users[users.length-1]); flash('Account created — welcome!');
+}
+async function doLogin(e){
+  e.preventDefault();
+  const g=id=>document.getElementById(id).value.trim();
+  const u=getUsers().find(u=>u.email.toLowerCase()===g('li-email').toLowerCase());
+  if(!u)return authErr('login-err','No account found with that email. Create one below.');
+  if(await hashPw(g('li-pass'),u.salt)!==u.hash)return authErr('login-err','Incorrect password. Try "Forgot password?".');
+  startSession(u);
+}
+async function doReset(e){
+  e.preventDefault();
+  const g=id=>document.getElementById(id).value.trim();
+  if(g('fg-pass')!==g('fg-pass2'))return authErr('forgot-err','New passwords do not match.');
+  const users=getUsers();
+  const u=users.find(u=>u.email.toLowerCase()===g('fg-email').toLowerCase());
+  if(!u)return authErr('forgot-err','No account found with that email.');
+  if(u.recovery && g('fg-rec').toLowerCase()!==u.recovery.toLowerCase())
+    return authErr('forgot-err','Recovery email does not match our records.');
+  const salt=crypto.randomUUID();
+  u.salt=salt;u.hash=await hashPw(g('fg-pass'),salt);u.pwResetAt=Date.now();
+  setUsers(users);
+  document.getElementById('forgot-ok').textContent='Password reset! Sign in with your new password.';
+  document.getElementById('forgot-ok').style.display='block';
+  setTimeout(()=>{showAuth('login');document.getElementById('li-email').value=u.email;},1200);
+}
+function startSession(u){
+  sessionStorage.setItem(SESSION_KEY,JSON.stringify({email:u.email,name:u.name}));
+  document.getElementById('auth-screen').classList.add('hidden');
+  renderUserChip();renderDailyAlert();
+}
+function logout(){sessionStorage.removeItem(SESSION_KEY);location.reload()}
+function currentUser(){
+  try{return JSON.parse(sessionStorage.getItem(SESSION_KEY))}catch{return null}
+}
+function renderUserChip(){
+  const u=currentUser();if(!u)return;
+  let chip=document.getElementById('user-chip');
+  if(!chip){chip=document.createElement('div');chip.id='user-chip';chip.className='userchip';
+    document.querySelector('header .spacer').before(chip);}
+  chip.innerHTML=`<span>👤 ${esc(u.name||u.email)}</span><button onclick="logout()">Sign out</button>`;
+}
+/* gate: require login on load */
+(function(){
+  const u=currentUser();
+  if(u){document.getElementById('auth-screen').classList.add('hidden');renderUserChip();}
+})();
+
+/* ---------------- DAILY PLAN / ALERTS ---------------- */
+function buildDailyPlan(){
+  const today=new Date();today.setHours(0,0,0,0);
+  const items=[];
+  // 1) overdue follow-ups = DO NOW
+  leads.filter(l=>!CLOSED.includes(l.stage)&&l.stage!=='Client')
+    .filter(l=>daysIn(l.stage,l)>CADENCE[l.stage])
+    .sort((a,b)=>daysIn(b.stage,b)-daysIn(a.stage,a))
+    .forEach(l=>items.push({when:'NOW',cls:'d-now',lead:l,
+      what:`<b>${esc(l.name)}</b>${l.company?' · '+esc(l.company):''} — ${daysIn(l.stage,l)}d in ${l.stage} (target ≤${CADENCE[l.stage]}d)`,
+      sub:{Leads:'Call now — leads decay fastest in the first week.',MQLs:'Pitch the Instant Audit and book the call.',SQLs:'Scope role/EHR/hours; send shortlist preview.',Deals:'Ask for the decision timeline; surface objections.'}[l.stage]||'Reach out today.'}));
+  // 2) due today
+  leads.filter(l=>!CLOSED.includes(l.stage)&&l.stage!=='Client')
+    .filter(l=>daysIn(l.stage,l)===CADENCE[l.stage])
+    .forEach(l=>items.push({when:'TODAY',cls:'',lead:l,
+      what:`Follow up with <b>${esc(l.name)}</b>${l.company?' · '+esc(l.company):''} — ${l.stage}, ${daysIn(l.stage,l)}d since last touch`,
+      sub:'Cadence is due today — a short touch keeps it warm.'}));
+  // 3) deals sitting past cadence
+  leads.filter(l=>l.stage==='Deals'&&daysIn('Deals',l)>=4)
+    .forEach(l=>{if(!items.some(i=>i.lead&&i.lead.id===l.id))items.push({when:'TODAY',cls:'',lead:l,
+      what:`Push deal <b>${esc(l.name)}</b> — proposal open ${daysIn('Deals',l)}d`,
+      sub:'Offer the 30-Day Right-Fit Promise to de-risk the yes.'})});
+  // 4) won but not onboarded
+  leads.filter(l=>l.stage==='Closed Won')
+    .forEach(l=>items.push({when:'TODAY',cls:'',lead:l,
+      what:`Onboard <b>${esc(l.name)}</b> — won ${daysIn('Closed Won',l)}d ago`,
+      sub:'Kick off matching within 2 business days of the win.'}));
+  // 5) client check-ins past 30d
+  leads.filter(l=>l.stage==='Client'&&daysIn('Client',l)>30)
+    .forEach(l=>items.push({when:'THIS WEEK',cls:'',lead:l,
+      what:`Client check-in: <b>${esc(l.name)}</b> — ${daysIn('Client',l)}d since go-live`,
+      sub:'Results review, expansion seats, testimonial ask.'}));
+  return items;
+}
+function renderDailyAlert(){
+  const el=document.getElementById('daily-alert');if(!el)return;
+  const plan=buildDailyPlan();
+  const d=new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'});
+  if(!plan.length){el.innerHTML=`<h3>☀️ Today's Plan — ${d}</h3><div style="font-size:13px;color:rgba(255,255,255,.75)">Nothing due today. Great time to mine referrals from happy clients and add new leads.</div>`;updateNavBadge(0);return;}
+  el.innerHTML=`<h3>🔔 Today's Plan — ${d} · ${plan.length} action${plan.length>1?'s':''}</h3>`+
+    plan.map(i=>`<div class="daily-item ${i.cls}">
+      <span class="d-time">${i.when}</span>
+      <div class="d-body">${i.what}<div class="d-sub">${i.sub||''}</div></div></div>`).join('');
+  updateNavBadge(plan.filter(i=>i.when==='NOW').length);
+}
+function updateNavBadge(n){
+  const b=document.getElementById('coach-badge');
+  if(!b)return;
+  b.textContent=n||'';b.style.display=n?'':'none';
+}
+
+renderBoard();
+renderCoach();
+renderDailyAlert();
+</script>
+<script>
+function toggleExportMenu(e){e.stopPropagation();const m=document.getElementById('export-menu');m.style.display=m.style.display==='none'?'block':'none';}
+document.addEventListener('click',()=>document.getElementById('export-menu').style.display='none');
+
+const EXPORT_COLS=['Name','Company','Email','Phone','Role Needed','Source','Stage','Est. Monthly Value','Days in Stage','Notes','Created'];
+function exportRows(){
+  return leads.map(l=>[l.name,l.company,l.email,l.phone,l.role,l.source,l.stage,+l.value||0,daysIn(l.stage,l),(l.notes||'').replace(/\r?\n/g,' '),l.created?new Date(l.created).toISOString().slice(0,10):'']);
+}
+function csvEscape(v){v=String(v??'');return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+function downloadCSV(){
+  const lines=[EXPORT_COLS.join(','),...exportRows().map(r=>r.map(csvEscape).join(',')),'','',
+    ...summaryRows().map(r=>r.map(v=>csvEscape(String(v??''))).join(','))];
+  const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='vt-leads-'+new Date().toISOString().slice(0,10)+'.csv';a.click();URL.revokeObjectURL(a.href);
+  flash('CSV downloaded (leads + summary) — import via File → Import → Upload');
+}
+function makeCSV(lines){
+  return new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+}
+function dlBlob(blob,name){
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();URL.revokeObjectURL(a.href);
+}
+function downloadSplitCSV(){
+  const d=new Date().toISOString().slice(0,10);
+  dlBlob(makeCSV([EXPORT_COLS.join(','),...exportRows().map(r=>r.map(csvEscape).join(','))]),'vt-leads-'+d+'.csv');
+  setTimeout(()=>dlBlob(makeCSV([SUM_COLS.join(','),...summaryRows().map(r=>r.map(v=>csvEscape(String(v??''))).join(','))]),'vt-summary-'+d+'.csv'),400);
+  flash('2 files downloaded: vt-leads & vt-summary');
+}
+function copyForSheets(){
+  const tsv=[EXPORT_COLS.join('\t'),...exportRows().map(r=>r.map(v=>String(v??'').replace(/\t|\r?\n/g,' ')).join('\t')),'','','--- SUMMARY ---','','',
+    ...summaryRows().map(r=>r.map(v=>String(v??'').replace(/\t|\r?\n/g,' ')).join('\t'))].join('\n');
+  navigator.clipboard.writeText(tsv).then(()=>flash('Copied — leads + summary. Paste into Google Sheets (Ctrl+V)'))
+    .catch(()=>{const ta=document.createElement('textarea');ta.value=tsv;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();flash('Copied — leads + summary')});
+}
+function openBlankSheet(){window.open('https://sheets.new','_blank');flash('Paste with Ctrl+V in the new sheet');}
+
+renderBoard();
+renderCoach();
+</script>
+</body>
+</html>
