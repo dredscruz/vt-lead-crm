@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { getPool, ensureSchema } from '../lib/db.js';
+import { getPool, ensureSchema, getSessionUser } from '../lib/db.js';
 
 export default async function handler(req, res) {
   await ensureSchema();
