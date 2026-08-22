@@ -1,4 +1,4 @@
-import { getPool, ensureSchema, getSessionUser } from '../_db.js';
+import { getPool, ensureSchema, getSessionUser } from '../lib/db.js';
 
 export default async function handler(req, res) {
   await ensureSchema();
