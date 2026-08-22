@@ -288,17 +288,7 @@ let leads = load();
 function load(){
   const saved = localStorage.getItem(LS_KEY);
   if(saved) return JSON.parse(saved);
-  return [
-    {id:1,name:"Dr. Amara Osei",company:"RM Wellness Clinic",email:"aosei@rmwellness.com",phone:"+1 720-555-0134",role:"Medical Biller / RCM",source:"Instant Audit",value:2800,stage:"SQLs",entered:{SQLs:Date.now()-4*864e5},notes:"AR days at 52. Wants dedicated biller + scribe.",created:Date.now()-21*864e5},
-    {id:2,name:"James Whitfield",company:"Endo Valley Endodontics",email:"james@endovalley.com",phone:"+1 208-555-0177",role:"Dental Biller",source:"Google Ads",value:2200,stage:"Deals",entered:{Deals:Date.now()-2*864e5},notes:"Proposal sent — 2 FTE dental billers. Reviewing with partner.",created:Date.now()-35*864e5},
-    {id:3,name:"Priya Raman",company:"Healthspan Medspa",email:"priya@healthspan.io",phone:"+1 305-555-0192",role:"Medical Receptionist",source:"Website",value:1900,stage:"MQLs",entered:{MQLs:Date.now()-6*864e5},notes:"Downloaded pricing guide, booked audit call.",created:Date.now()-9*864e5},
-    {id:4,name:"Tom Beasley",company:"Ohana Family Practice",email:"tom@ohanafp.com",phone:"+1 808-555-0110",role:"Medical Admin Support",source:"Referral",value:2400,stage:"Client",entered:{Client:Date.now()-40*864e5},notes:"Teammate live since June. Very happy — referral source for 2 new leads.",created:Date.now()-95*864e5},
-    {id:5,name:"Lena Cruz",company:"Prostate Cancer USA",email:"lena@pcusa.org",phone:"+1 615-555-0166",role:"Medical Scribe",source:"Cold Outreach",value:2600,stage:"Won",notes:"",created:Date.now()-60*864e5},
-    {id:6,name:"Mark Delaney",company:"Synergy HomeCare",email:"mark@synergyhc.com",phone:"+1 480-555-0143",role:"Other",source:"Event",value:1500,stage:"Leads",entered:{Leads:Date.now()},notes:"Met at HIMSS booth. Needs front-office coverage.",created:Date.now()},
-    {id:7,name:"Dr. Fatima Nasser",company:"LifeQuest Primary Care",email:"fnasser@lifequest.com",phone:"+1 469-555-0188",role:"Medical Biller / RCM",source:"Instant Audit",value:3100,stage:"Won",notes:"",created:Date.now()-75*864e5},
-    {id:8,name:"Greg Holt",company:"Being True To You",email:"greg@btty.com",phone:"+1 612-555-0121",role:"Dental Coordinator",source:"Website",value:1700,stage:"Lost",notes:"Went with local temp agency — price sensitive.",created:Date.now()-50*864e5},
-    {id:9,name:"Alicia Moreno",company:"Bright Smile Pediatric Dental",email:"alicia@brightsmile.com",phone:"+1 813-555-0102",role:"Dental Biller",source:"Referral",value:2100,stage:"SQLs",entered:{SQLs:Date.now()-11*864e5},notes:"No-show rate 22%. Discovery call done, scoping coordinator role.",created:Date.now()-30*864e5},
-  ];
+  return []; // fresh start — empty dashboard
 }
 function save(){ localStorage.setItem(LS_KEY, JSON.stringify(leads)); scheduleSync(); }
 
