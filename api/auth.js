@@ -51,8 +51,8 @@ export default async function handler(req, res) {
 
     // ---------- ME ----------
     if (action === 'me') {
-      const user = await requireAuth(req, res);
-      if (!user) return;
+      const user = await getSessionUser(req);
+      if (!user) return res.status(401).json({ error: 'Not signed in' });
       return res.json({ user });
     }
 
@@ -71,7 +71,6 @@ export default async function handler(req, res) {
   }
 }
 
-function requireAuth(req, res) { /* handled inline via getSessionUser in leads route */ }
 
 async function setSession(res, user) {
   const token = crypto.randomBytes(32).toString('hex');
