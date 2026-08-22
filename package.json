@@ -1,0 +1,24 @@
+{
+  "name": "vt-lead-crm",
+  "version": "1.0.0",
+  "description": "A lightweight, fully client-side Lead CRM branded for [Virtual Teammate](https://www.virtualteammate.com/).",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dredscruz/vt-lead-crm.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/dredscruz/vt-lead-crm/issues"
+  },
+  "homepage": "https://github.com/dredscruz/vt-lead-crm#readme",
+  "dependencies": {
+    "pg": "^8.23.0"
+  }
+}

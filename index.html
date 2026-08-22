@@ -300,7 +300,7 @@ function load(){
     {id:9,name:"Alicia Moreno",company:"Bright Smile Pediatric Dental",email:"alicia@brightsmile.com",phone:"+1 813-555-0102",role:"Dental Biller",source:"Referral",value:2100,stage:"SQLs",entered:{SQLs:Date.now()-11*864e5},notes:"No-show rate 22%. Discovery call done, scoping coordinator role.",created:Date.now()-30*864e5},
   ];
 }
-function save(){ localStorage.setItem(LS_KEY, JSON.stringify(leads)); }
+function save(){ localStorage.setItem(LS_KEY, JSON.stringify(leads)); scheduleSync(); }
 
 // normalize legacy stage names from seeds
 function norm(s){
@@ -631,14 +631,20 @@ function copySummary(){
     .catch(()=>{const ta=document.createElement('textarea');ta.value=tsv;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();flash('Summary copied')});
 }
 
-/* ---------------- AUTH (local, hashed) ---------------- */
-const USERS_KEY='vt_crm_users_v1', SESSION_KEY='vt_crm_session_v1';
-async function hashPw(pw,salt){
-  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(salt+'::'+pw));
-  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+/* ---------------- AUTH (server-backed) ---------------- */
+async function api(path, body){
+  const r = await fetch('/api/' + path, {
+    method: body ? 'POST' : 'GET',
+    headers: body ? {'Content-Type':'application/json'} : {},
+    body: body ? JSON.stringify(body) : undefined,
+    credentials: 'same-origin',
+  });
+  const j = await r.json().catch(()=>({}));
+  if (!r.ok) throw new Error(j.error || 'Request failed');
+  return j;
 }
-function getUsers(){return JSON.parse(localStorage.getItem(USERS_KEY)||'[]')}
-function setUsers(u){localStorage.setItem(USERS_KEY,JSON.stringify(u))}
+function getUsers(){return []} /* legacy no-op */
+function setUsers(){/* legacy no-op */}
 function showAuth(mode){
   ['login','signup','forgot'].forEach(m=>document.getElementById('auth-'+m).style.display=m===mode?'':'none');
   ['login-err','signup-err','forgot-err'].forEach(id=>document.getElementById(id).style.display='none');
@@ -649,58 +655,82 @@ async function doSignup(e){
   e.preventDefault();
   const g=id=>document.getElementById(id).value.trim();
   if(g('su-pass')!==g('su-pass2'))return authErr('signup-err','Passwords do not match.');
-  const users=getUsers();
-  if(users.some(u=>u.email.toLowerCase()===g('su-email').toLowerCase()))return authErr('signup-err','An account with this email already exists.');
-  const salt=crypto.randomUUID();
-  users.push({name:g('su-name'),email:g('su-email'),recovery:g('su-rec'),
-    salt,hash:await hashPw(g('su-pass'),salt),created:Date.now()});
-  setUsers(users); startSession(users[users.length-1]); flash('Account created — welcome!');
+  try{
+    const {user}=await api('auth?action=signup',{action:'signup',name:g('su-name'),email:g('su-email'),recovery:g('su-rec'),password:g('su-pass')});
+    startSession(user); flash('Account created — welcome!');
+  }catch(err){authErr('signup-err',err.message)}
 }
 async function doLogin(e){
   e.preventDefault();
   const g=id=>document.getElementById(id).value.trim();
-  const u=getUsers().find(u=>u.email.toLowerCase()===g('li-email').toLowerCase());
-  if(!u)return authErr('login-err','No account found with that email. Create one below.');
-  if(await hashPw(g('li-pass'),u.salt)!==u.hash)return authErr('login-err','Incorrect password. Try "Forgot password?".');
-  startSession(u);
+  try{
+    const {user}=await api('auth?action=login',{email:g('li-email'),password:g('li-pass')});
+    startSession(user);
+  }catch(err){authErr('login-err',err.message)}
 }
 async function doReset(e){
   e.preventDefault();
   const g=id=>document.getElementById(id).value.trim();
   if(g('fg-pass')!==g('fg-pass2'))return authErr('forgot-err','New passwords do not match.');
-  const users=getUsers();
-  const u=users.find(u=>u.email.toLowerCase()===g('fg-email').toLowerCase());
-  if(!u)return authErr('forgot-err','No account found with that email.');
-  if(u.recovery && g('fg-rec').toLowerCase()!==u.recovery.toLowerCase())
-    return authErr('forgot-err','Recovery email does not match our records.');
-  const salt=crypto.randomUUID();
-  u.salt=salt;u.hash=await hashPw(g('fg-pass'),salt);u.pwResetAt=Date.now();
-  setUsers(users);
-  document.getElementById('forgot-ok').textContent='Password reset! Sign in with your new password.';
-  document.getElementById('forgot-ok').style.display='block';
-  setTimeout(()=>{showAuth('login');document.getElementById('li-email').value=u.email;},1200);
+  try{
+    await api('auth?action=recover',{email:g('fg-email'),recovery:g('fg-rec'),password:g('fg-pass')});
+    document.getElementById('forgot-ok').textContent='Password reset! Sign in with your new password.';
+    document.getElementById('forgot-ok').style.display='block';
+    setTimeout(()=>{showAuth('login');document.getElementById('li-email').value=g('fg-email');},1200);
+  }catch(err){authErr('forgot-err',err.message)}
 }
-function startSession(u){
-  sessionStorage.setItem(SESSION_KEY,JSON.stringify({email:u.email,name:u.name}));
+async function startSession(u){
+  currentUserCache=u;
   document.getElementById('auth-screen').classList.add('hidden');
-  renderUserChip();renderDailyAlert();
+  renderUserChip();
+  await syncFromServer();
 }
-function logout(){sessionStorage.removeItem(SESSION_KEY);location.reload()}
-function currentUser(){
-  try{return JSON.parse(sessionStorage.getItem(SESSION_KEY))}catch{return null}
+async function logout(){
+  try{await api('auth?action=logout')}catch{}
+  location.reload();
+}
+let currentUserCache=null;
+async function currentUser(){
+  if(currentUserCache)return currentUserCache;
+  try{currentUserCache=(await api('auth?action=me')).user}catch{}
+  return currentUserCache;
 }
 function renderUserChip(){
-  const u=currentUser();if(!u)return;
+  const u=currentUserCache;if(!u)return;
   let chip=document.getElementById('user-chip');
   if(!chip){chip=document.createElement('div');chip.id='user-chip';chip.className='userchip';
     document.querySelector('header .spacer').before(chip);}
   chip.innerHTML=`<span>👤 ${esc(u.name||u.email)}</span><button onclick="logout()">Sign out</button>`;
 }
-/* gate: require login on load */
-(function(){
-  const u=currentUser();
-  if(u){document.getElementById('auth-screen').classList.add('hidden');renderUserChip();}
+/* gate: check session on load */
+(async function(){
+  const u=await currentUser();
+  if(u){document.getElementById('auth-screen').classList.add('hidden');renderUserChip();await syncFromServer();}
 })();
+
+/* ---------------- SERVER SYNC for leads ---------------- */
+let syncTimer=null;
+let lastSynced=null;
+async function syncFromServer(){
+  try{
+    const {leads:remote}=await api('leads');
+    // merge: prefer server copy unless local has unsaved changes
+    leads=remote;
+    save();          // keep a local cache too
+    renderBoard();renderCoach();renderDailyAlert();
+  }catch(e){/* offline or not signed in — keep local cache */}
+}
+function scheduleSync(){
+  clearTimeout(syncTimer);
+  syncTimer=setTimeout(pushToServer,800); // debounced push after edits
+}
+async function pushToServer(){
+  try{
+    await fetch('/api/leads',{method:'PUT',headers:{'Content-Type':'application/json'},
+      credentials:'same-origin',body:JSON.stringify({leads})});
+    lastSynced=JSON.stringify(leads);
+  }catch(e){flash('⚠ Offline — changes cached locally and will stay on this device')}
+}
 
 /* ---------------- DAILY PLAN / ALERTS ---------------- */
 function buildDailyPlan(){
