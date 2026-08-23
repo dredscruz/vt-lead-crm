@@ -212,6 +212,7 @@
       <button onclick="openBlankSheet()" style="display:block;width:100%;text-align:left;background:none;border:none;padding:10px 12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">🟩 New blank Google Sheet<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">Opens sheets.new — paste right in</span></button>
       <button onclick="downloadCSV()" style="display:block;width:100%;text-align:left;background:none;border:none;padding:10px 12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">📄 Download CSV file<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">Leads + summary in one file</span></button>
       <button onclick="downloadSplitCSV()" style="display:block;width:100%;text-align:left;background:none;border:none;padding:10px 12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">🗂️ Download 2 separate CSVs<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">leads.csv + summary.csv (one tab each)</span></button>
+      <button onclick="openPushSheet()" style="display:block;width:100%;text-align:left;background:none;border:none;padding:10px 12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">🟢 Push to Google Sheet<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">Send all leads straight into any Google Sheet</span></button>
     </div>
   </div>
   <button class="btn" onclick="openModal()">+ New Lead</button>
@@ -266,6 +267,37 @@
         <button type="button" class="btn ghost" onclick="closeImport()">Cancel</button>
         <button type="button" class="btn" onclick="commitImport()" id="imp-commit-btn">Import Leads</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Push to Sheet Modal -->
+<div class="overlay" id="push-overlay">
+  <div class="modal">
+    <h2>🟢 Push Leads to a Google Sheet</h2>
+    <div id="push-step1">
+      <div class="field"><label>Target Google Sheet link *</label><input id="push-url" placeholder="https://docs.google.com/spreadsheets/d/…"></div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.55">This <b>writes</b> your leads into the sheet you pick — use any sheet other than your import source. One-time setup per sheet:<br><br>
+        1. Open the sheet → <b>Extensions → Apps Script</b>, delete anything there, and paste the script shown below.<br>
+        2. Click <b>Deploy → New deployment → Web app</b>. Set "Who has access" to <b>Anyone</b>, then Deploy and copy the <b>Web app URL</b> (ends in <code>/exec</code>).<br>
+        3. Paste that Web app URL here.</div>
+      <details style="margin-bottom:12px"><summary style="font-weight:700;font-size:12.5px;cursor:pointer;color:var(--accent)">Show Apps Script code to paste</summary>
+        <textarea id="push-script" rows="8" readonly style="width:100%;font-family:monospace;font-size:10.5px;margin-top:6px;border:1px solid var(--border);border-radius:9px;padding:8px;background:#fbfcfd"></textarea>
+        <button type="button" class="btn ghost" style="padding:5px 12px;font-size:11.5px;margin-top:6px" onclick="copyPushScript()">Copy script</button>
+      </details>
+      <div class="field"><label>Apps Script Web app URL *</label><input id="push-webapp" placeholder="https://script.google.com/macros/s/…/exec"></div>
+      <div class="field"><label>Mode</label><select id="push-mode"><option value="replace">Replace all contents of the sheet</option><option value="append">Append below existing rows</option></select></div>
+      <div id="push-err" class="auth-err"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" onclick="closePush()">Cancel</button>
+        <button type="button" class="btn" onclick="doPush()" id="push-btn">Push leads now</button>
+      </div>
+    </div>
+    <div id="push-step2" style="display:none;text-align:center">
+      <div style="font-size:40px">✅</div>
+      <div style="font-weight:800;font-size:16px;margin:8px 0">Leads pushed!</div>
+      <div id="push-result" style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.5"></div>
+      <a id="push-open-link" class="btn" style="display:inline-block;text-decoration:none" target="_blank">Open the Google Sheet</a>
     </div>
   </div>
 </div>
@@ -992,6 +1024,61 @@ async function commitImport(){
   }
   save();closeImport();renderBoard();renderCoach();renderDailyAlert();
   flash(`Imported ${added} lead${added===1?'':'s'}${skipped?` · skipped ${skipped} duplicate${skipped===1?'':'s'}`:''}`);
+}
+
+/* ---------------- PUSH EXPORT (write leads into a Google Sheet via Apps Script) ---------------- */
+const PUSH_SCRIPT = `function doPost(e) {
+  var data = JSON.parse(e.postData.contents);
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+  if (data.mode === 'replace') { sheet.clear(); }
+  var startRow = data.mode === 'replace' ? 1 : Math.max(sheet.getLastRow(), 0) + 2;
+  sheet.getRange(startRow, 1, data.rows.length, data.rows[0].length).setValues(data.rows);
+  return ContentService.createTextOutput(JSON.stringify({ok: true, written: data.rows.length}))
+    .setMimeType(ContentService.MimeType.JSON);
+}`;
+function openPush(){
+  document.getElementById('export-menu').style.display='none';
+  document.getElementById('push-step1').style.display='';
+  document.getElementById('push-step2').style.display='none';
+  document.getElementById('push-err').style.display='none';
+  const saved=JSON.parse(localStorage.getItem('vt_push_sheet')||'null');
+  if(saved){document.getElementById('push-url').value=saved.url||'';document.getElementById('push-webapp').value=saved.webapp||'';}
+  document.getElementById('push-script').value=PUSH_SCRIPT;
+  document.getElementById('push-overlay').classList.add('open');
+}
+function closePush(){document.getElementById('push-overlay').classList.remove('open')}
+document.getElementById('push-overlay').addEventListener('click',e=>{if(e.target.id==='push-overlay')closePush()});
+function pushErr(msg){const e=document.getElementById('push-err');e.textContent=msg;e.style.display='block'}
+function copyPushScript(){
+  navigator.clipboard.writeText(PUSH_SCRIPT).then(()=>flash('Apps Script copied — paste it in Extensions → Apps Script'))
+    .catch(()=>{const ta=document.getElementById('push-script');ta.select();document.execCommand('copy');flash('Script copied')});
+}
+async function doPush(){
+  pushErr('');
+  const webapp=document.getElementById('push-webapp').value.trim();
+  const mode=document.getElementById('push-mode').value;
+  const sheetLink=document.getElementById('push-url').value.trim();
+  let sheetId=null;
+  try{const m=sheetLink.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);if(!m)throw 0;sheetId=m[1];}
+  catch{return pushErr('That does not look like a Google Sheets link.')}
+  if(!/^https:\/\/script\.google(usercontent)?\.com\/macros\/s\/[\w-]+\/exec/.test(webapp))
+    return pushErr('The Web app URL should look like https://script.google.com/macros/s/…/exec');
+  if(!leads.length)return pushErr('No leads to push yet.');
+  const btn=document.getElementById('push-btn');btn.disabled=true;btn.textContent='Pushing…';
+  try{
+    // no-cors: Google's exec endpoint has no CORS headers; we verify by reading back instead
+    await fetch(webapp,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({mode,rows:[EXPORT_COLS,...exportRows()]})});
+    localStorage.setItem('vt_push_sheet',JSON.stringify({url:sheetLink,webapp}));
+    document.getElementById('push-step1').style.display='none';
+    document.getElementById('push-step2').style.display='';
+    document.getElementById('push-result').innerHTML=`${leads.length} lead${leads.length===1?'':'s'} sent to your Google Sheet<br><span style="font-size:12px">(check the tab opened below to confirm rows landed)</span>`;
+    const link=document.getElementById('push-open-link');
+    link.href=sheetLink.includes('/d/')?sheetLink:'https://docs.google.com/spreadsheets/';
+    window.open(link.href,'_blank');
+    flash('Leads pushed to Google Sheet');
+  }catch(err){pushErr('Could not reach the Apps Script URL — check it and that the deployment access is "Anyone".')}
+  btn.disabled=false;btn.textContent='Push leads now';
 }
 
 renderBoard();
