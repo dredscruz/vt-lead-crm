@@ -198,8 +198,15 @@
     <button id="nav-coach" onclick="setView('coach')">Sales Coach <span class="nav-badge" id="coach-badge" style="display:none"></span></button>
   </nav>
   <div class="spacer"></div>
-  <div style="position:relative">
-    <button class="btn ghost" onclick="toggleExportMenu(event)">⬇ Export ▾</button>
+  <button class="btn ghost" onclick="toggleMenu(event,'import-menu')">⬆ Import ▾</button>
+  <div id="import-menu" style="display:none;position:absolute;right:0;top:110%;background:#fff;border:1px solid var(--border);border-radius:11px;box-shadow:var(--shadow);min-width:270px;padding:6px;z-index:99">
+    <button onclick="openImport('sheet')" style="display:block;width:100%;text-align:left;background:none;border:none;padding:10px 12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">🟩 Fetch a Google Sheet<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">Paste the share link — pulls rows straight in</span></button>
+    <button onclick="openImport('upload')" style="display:block;width:100%;text-align:left;background:none;border:none;padding:10px 12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">📄 Upload CSV / TSV file<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">From Sheets export, Excel save-as, etc.</span></button>
+    <button onclick="openImport('paste')" style="display:block;width:100%;text-align:left;background:none;border:none;padding:10px 12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">📋 Paste rows<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">Copy straight out of any spreadsheet</span></button>
+  </div>
+</div>
+<div style="position:relative">
+  <button class="btn ghost" onclick="toggleExportMenu(event)">⬇ Export ▾</button>
     <div id="export-menu" style="display:none;position:absolute;right:0;top:110%;background:#fff;border:1px solid var(--border);border-radius:11px;box-shadow:var(--shadow);min-width:250px;padding:6px;z-index:99">
       <button onclick="copyForSheets()" style="display:block;width:100%;text-align:left;background:none;border:none;padding:10px 12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">📋 Copy for Google Sheets<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">One click, then Ctrl+V in any sheet</span></button>
       <button onclick="openBlankSheet()" style="display:block;width:100%;text-align:left;background:none;border:none;padding:10px 12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">🟩 New blank Google Sheet<span style="display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:2px">Opens sheets.new — paste right in</span></button>
@@ -230,6 +237,38 @@
     <div id="coach-list" style="grid-column:span 12;display:grid;gap:14px"></div>
   </section>
 </main>
+
+<!-- Import Modal -->
+<div class="overlay" id="import-overlay">
+  <div class="modal">
+    <h2>⬆ Import Leads</h2>
+    <div id="import-sheet" style="display:none">
+      <div class="field"><label>Google Sheet share link *</label><input id="imp-url" placeholder="https://docs.google.com/spreadsheets/d/…"></div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5">In Google Sheets click <b>Share → Anyone with the link → Viewer</b>, then paste the link here. The sheet must have a header row — columns like <i>Name, Company, Email, Phone, Role, Source, Stage, Value ($/mo), Notes</i> are matched automatically.</div>
+      <button class="btn" onclick="fetchGoogleSheet()" id="imp-fetch-btn">Fetch & Preview Rows</button>
+      <div id="imp-err" class="auth-err"></div>
+    </div>
+    <div id="import-upload" style="display:none">
+      <div class="field"><label>CSV / TSV file *</label><input type="file" id="imp-file" accept=".csv,.tsv,.txt,text/csv" onchange="readImportFile(this.files[0])"></div>
+    </div>
+    <div id="import-paste" style="display:none">
+      <div class="field"><label>Paste rows (first line = headers) *</label><textarea id="imp-paste" rows="7" placeholder="Name,Company,Email,Phone..."></textarea></div>
+      <button class="btn" onclick="parsePaste()">Preview Rows</button>
+    </div>
+    <div id="imp-preview" style="display:none;margin-top:14px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:8px" id="imp-count"></div>
+      <table style="font-size:11.5px;max-height:220px;display:block;overflow-y:auto;border:1px solid var(--border);border-radius:9px"><thead id="imp-thead"></thead><tbody id="imp-tbody"></tbody></table>
+      <div class="row2" style="margin-top:12px">
+        <div class="field"><label>Stage for imported leads</label><select id="imp-stage"></select></div>
+        <div class="field"><label>Duplicates</label><select id="imp-dupes"><option value="skip">Skip (match by email)</option><option value="add">Add anyway</option></select></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" onclick="closeImport()">Cancel</button>
+        <button type="button" class="btn" onclick="commitImport()" id="imp-commit-btn">Import Leads</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- Lead Modal -->
 <div class="overlay" id="overlay">
@@ -779,7 +818,7 @@ renderDailyAlert();
 </script>
 <script>
 function toggleExportMenu(e){e.stopPropagation();const m=document.getElementById('export-menu');m.style.display=m.style.display==='none'?'block':'none';}
-document.addEventListener('click',()=>document.getElementById('export-menu').style.display='none');
+document.addEventListener('click',()=>{document.getElementById('export-menu').style.display='none';const im=document.getElementById('import-menu');if(im)im.style.display='none';});
 
 const EXPORT_COLS=['Name','Company','Email','Phone','Role Needed','Source','Stage','Est. Monthly Value','Days in Stage','Notes','Created'];
 function exportRows(){
@@ -813,6 +852,147 @@ function copyForSheets(){
     .catch(()=>{const ta=document.createElement('textarea');ta.value=tsv;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();flash('Copied — leads + summary')});
 }
 function openBlankSheet(){window.open('https://sheets.new','_blank');flash('Paste with Ctrl+V in the new sheet');}
+
+/* ---------------- IMPORT (Google Sheet / CSV / paste) ---------------- */
+function toggleMenu(e,id){e.stopPropagation();const m=document.getElementById(id);m.style.display=m.style.display==='none'?'block':'none';}
+function openImport(mode){
+  document.getElementById('import-menu').style.display='none';
+  ['sheet','upload','paste'].forEach(m=>document.getElementById('import-'+m).style.display=m===mode?'':'none');
+  document.getElementById('imp-preview').style.display='none';
+  const err=document.getElementById('imp-err');err.style.display='none';
+  const sel=document.getElementById('imp-stage');
+  sel.innerHTML=STAGES.map(s=>`<option>${s.id}</option>`).join('');
+  sel.value='Leads';
+  document.getElementById('import-overlay').classList.add('open');
+  if(mode==='sheet')setTimeout(()=>document.getElementById('imp-url').focus(),50);
+  if(mode==='paste')setTimeout(()=>document.getElementById('imp-paste').focus(),50);
+}
+function closeImport(){document.getElementById('import-overlay').classList.remove('open')}
+document.getElementById('import-overlay').addEventListener('click',e=>{if(e.target.id==='import-overlay')closeImport()});
+function impErr(msg){const e=document.getElementById('imp-err');e.textContent=msg;e.style.display='block'}
+
+let importRows=null;
+// Google Sheets gviz CSV endpoint: works for any sheet shared as "Anyone with the link → Viewer"
+function sheetCsvUrl(link){
+  const m=link.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if(!m)throw new Error('That does not look like a Google Sheets link.');
+  const gid=(link.match(/[#&?]gid=(\d+)/)||[])[1]||'0';
+  return `https://docs.google.com/spreadsheets/d/${m[1]}/gviz/tq?tqx=out:csv&gid=${gid}`;
+}
+async function fetchGoogleSheet(){
+  impErr('');
+  let url;
+  try{url=sheetCsvUrl(document.getElementById('imp-url').value.trim())}catch(err){return impErr(err.message)}
+  const btn=document.getElementById('imp-fetch-btn');btn.disabled=true;btn.textContent='Fetching…';
+  try{
+    const r=await fetch(url);
+    if(!r.ok)throw new Error(r.status===404?'Sheet not found — check the link & sharing setting':'Google refused the request ('+r.status+') — is the sheet shared as "Anyone with the link"?');
+    const text=await r.text();
+    if(/^\s*<(!DOCTYPE|html)/i.test(text))throw new Error('Google returned a sign-in page — set sharing to "Anyone with the link → Viewer" and try again.');
+    parseAndPreview(text);
+  }catch(err){impErr(err.message)}
+  btn.disabled=false;btn.textContent='Fetch & Preview Rows';
+}
+function readImportFile(f){
+  if(!f)return;impErr('');
+  const rd=new FileReader();
+  rd.onload=()=>parseAndPreview(rd.result);
+  rd.onerror=()=>impErr('Could not read that file.');
+  rd.readAsText(f);
+}
+function parsePaste(){
+  impErr('');
+  const t=document.getElementById('imp-paste').value.trim();
+  if(!t)return impErr('Paste at least a header row and one data row.');
+  parseAndPreview(t);
+}
+function detectDelimiter(text){
+  const line=text.split(/\r?\n/)[0];
+  const tabs=(line.match(/\t/g)||[]).length, commas=(line.match(/,/g)||[]).length;
+  return tabs>commas?'\t':',';
+}
+function parseDelimited(text){
+  const delim=detectDelimiter(text), rows=[];let row=[],cell='',q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){cell+='"';i++;} else q=false; } else cell+=c; }
+    else if(c==='"')q=true;
+    else if(c===delim){row.push(cell);cell='';}
+    else if(c==='\n'||c==='\r'){ if(c==='\r'&&text[i+1]==='\n')i++; row.push(cell);cell='';
+      if(row.some(v=>v.trim()!==''))rows.push(row); row=[];}
+    else cell+=c;
+  }
+  row.push(cell); if(row.some(v=>v.trim()!==''))rows.push(row);
+  return rows;
+}
+function normHeader(h){return String(h||'').toLowerCase().replace(/[^a-z]/g,'');}
+const HEADER_MAP={
+  name:['name','contactname','contact','fullname','leadname','clientname'],
+  company:['company','practice','practicecompany','companyname','organization','org','business','clinic'],
+  email:['email','emailaddress','contactemail'],
+  phone:['phone','phonenumber','mobile','tel','telephone','contactnumber'],
+  role:['role','roleneeded','position','roleposition','jobrole','teammate','teammaterole'],
+  source:['source','leadsource'],
+  stage:['stage','status','pipeline','pipelinestage'],
+  value:['value','dealvalue','estvalue','estimatedmonthlyvalue','monthlyvalue','valuemonthly','estmonthlyvalue','valuedollarsmonth'],
+  notes:['notes','note','comments','context','description','remarks']
+};
+function mapHeaders(header){
+  return header.map(h=>{
+    const n=normHeader(h);
+    for(const [field,names] of Object.entries(HEADER_MAP))
+      if(names.includes(n))return field;
+    // partial match fallback
+    for(const [field,names] of Object.entries(HEADER_MAP))
+      if(names.some(x=>n.includes(x)))return field;
+    return null;
+  });
+}
+function parseAndPreview(text){
+  const rows=parseDelimited(text);
+  if(rows.length<2)return impErr('Need a header row plus at least one data row.');
+  const cols=mapHeaders(rows[0]);
+  if(!cols.includes('name'))return impErr('Could not find a Name column. Header must include something like "Name" or "Contact".');
+  const data=rows.slice(1).map(r=>{
+    const l={name:'',company:'',email:'',phone:'',role:'',source:'Import',stage:null,value:0,notes:''};
+    cols.forEach((f,i)=>{if(!f)return;const v=(r[i]??'').trim();if(!v)return;
+      if(f==='value')l.value=parseFloat(String(v).replace(/[^0-9.]/g,''))||0;
+      else if(f==='stage')l.stage=v;
+      else l[f]=v;});
+    return l;
+  }).filter(l=>l.name);
+  if(!data.length)return impErr('No data rows found under the header.');
+  importRows=data;
+  showPreview();
+}
+function showPreview(){
+  document.getElementById('imp-preview').style.display='';
+  document.getElementById('imp-count').textContent=`${importRows.length} lead${importRows.length===1?'':'s'} ready to import`;
+  const FIELDS=['name','company','email','phone','role','source','value','notes'];
+  document.getElementById('imp-thead').innerHTML='<tr>'+FIELDS.map(f=>`<th style="position:sticky;top:0;background:#fff">${f}</th>`).join('')+'</tr>';
+  document.getElementById('imp-tbody').innerHTML=importRows.slice(0,50).map(l=>'<tr>'+FIELDS.map(f=>`<td>${esc(l[f])}</td>`).join('')+'</tr>').join('')
+    +(importRows.length>50?`<tr><td colspan="${FIELDS.length}" style="color:var(--muted)">…and ${importRows.length-50} more</td></tr>`:'');
+}
+async function commitImport(){
+  const stage=document.getElementById('imp-stage').value;
+  const dupMode=document.getElementById('imp-dupes').value;
+  const existingEmails=new Set(leads.map(l=>(l.email||'').toLowerCase()).filter(Boolean));
+  let added=0,skipped=0;
+  for(const r of importRows){
+    if(dupMode==='skip'&&r.email&&existingEmails.has(r.email.toLowerCase())){skipped++;continue;}
+    leads.push({id:uid(),name:r.name,company:r.company,email:r.email,phone:r.phone,
+      role:r.role&&[...document.getElementById('f-role').options].some(o=>o.value===r.role)?r.role:(r.role||'Other'),
+      source:r.source||'Import',
+      stage:r.stage&&STAGES.some(s=>s.id.toLowerCase()===r.stage.toLowerCase())?norm(STAGES.find(s=>s.id.toLowerCase()===r.stage.toLowerCase()).id):stage,
+      value:+r.value||0,
+      entered:{[r.stage&&STAGES.some(s=>s.id.toLowerCase()===r.stage.toLowerCase())?norm(STAGES.find(s=>s.id.toLowerCase()===r.stage.toLowerCase()).id):stage]:Date.now()},
+      notes:r.notes,created:Date.now()});
+    if(r.email)existingEmails.add(r.email.toLowerCase());
+    added++;
+  }
+  save();closeImport();renderBoard();renderCoach();renderDailyAlert();
+  flash(`Imported ${added} lead${added===1?'':'s'}${skipped?` · skipped ${skipped} duplicate${skipped===1?'':'s'}`:''}`);
+}
 
 renderBoard();
 renderCoach();
