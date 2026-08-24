@@ -1155,11 +1155,25 @@ function renderUserChip(){
 /* ---------------- SERVER SYNC for leads ---------------- */
 let syncTimer=null;
 let lastSynced=null;
+function collectSettings(){
+  try{return {
+    goals:JSON.parse(localStorage.getItem(GOALS_KEY)||'null'),
+    snippets:JSON.parse(localStorage.getItem(SNIP_KEY)||'null'),
+  }}catch(e){return {}}
+}
+async function applySettings(s){
+  if(!s||typeof s!=='object')return;
+  try{
+    if(s.goals)localStorage.setItem(GOALS_KEY,JSON.stringify(s.goals));
+    if(s.snippets)localStorage.setItem(SNIP_KEY,JSON.stringify(s.snippets));
+  }catch(e){}
+}
 async function syncFromServer(){
   try{
-    const {leads:remote}=await api('leads');
+    const {leads:remote,settings}=await api('leads');
     // merge: prefer server copy unless local has unsaved changes
     leads=remote;
+    await applySettings(settings);
     save();          // keep a local cache too
     renderBoard();renderCoach();renderDailyAlert();
   }catch(e){/* offline or not signed in — keep local cache */}
@@ -1171,7 +1185,7 @@ function scheduleSync(){
 async function pushToServer(){
   try{
     await fetch('/api/leads',{method:'PUT',headers:{'Content-Type':'application/json'},
-      credentials:'same-origin',body:JSON.stringify({leads})});
+      credentials:'same-origin',body:JSON.stringify({leads,settings:collectSettings()})});
     lastSynced=JSON.stringify(leads);
   }catch(e){flash('⚠ Offline — changes cached locally and will stay on this device')}
 }
