@@ -384,15 +384,15 @@
         <div class="field"><label>Phone</label><input id="f-phone" placeholder="+1 ..."></div>
       </div>
       <div class="row2">
-        <div class="field"><label>Role Needed</label><select id="f-role">
+        <div class="field"><label>Role Needed</label><div style="display:flex;gap:6px"><select id="f-role" style="flex:1">
           <option>Medical Biller / RCM</option><option>Medical Receptionist</option>
           <option>Medical Scribe</option><option>Dental Biller</option>
           <option>Dental Coordinator</option><option>Medical Admin Support</option><option>Other</option>
-        </select></div>
-        <div class="field"><label>Source</label><select id="f-source">
+        </select><button type="button" class="btn" style="padding:0 10px" title="Add a new role" onclick="addSelectOption('f-role','New role needed')">＋</button></div></div>
+        <div class="field"><label>Source</label><div style="display:flex;gap:6px"><select id="f-source" style="flex:1">
           <option>Website</option><option>Instant Audit</option><option>Referral</option>
           <option>Google Ads</option><option>Cold Outreach</option><option>Event</option>
-        </select></div>
+        </select><button type="button" class="btn" style="padding:0 10px" title="Add a new source" onclick="addSelectOption('f-source','New source')">＋</button></div></div>
       </div>
       <div class="row2">
         <div class="field"><label>Est. Deal Value ($/mo)</label><input id="f-value" type="number" min="0" step="50" placeholder="2500"></div>
@@ -803,6 +803,7 @@ function openModal(lead=null,presetStage=null){
   document.getElementById('btn-delete').style.display=lead?'':'none';
   const sel=document.getElementById('f-stage');
   sel.innerHTML=STAGES.map(s=>`<option>${s.id}</option>`).join('');
+  applyCustomOptions();
   const g=id=>document.getElementById(id);
   g('f-id').value='';g('f-name').value=lead?.name||'';g('f-company').value=lead?.company||'';
   g('f-email').value=lead?.email||'';g('f-phone').value=lead?.phone||'';g('f-role').value=lead?.role||g('f-role').options[0].value;
@@ -1076,6 +1077,32 @@ function copySummary(){
 }
 
 /* ---------------- AUTH (server-backed) ---------------- */
+const CUSTOM_OPTS_KEY='vt_lead_custom_options_v1';
+function getCustomOpts(){try{return JSON.parse(localStorage.getItem(CUSTOM_OPTS_KEY))||{role:[],source:[]}}catch(e){return {role:[],source:[]}}}
+function saveCustomOpts(o){localStorage.setItem(CUSTOM_OPTS_KEY,JSON.stringify(o))}
+function applyCustomOptions(){
+  const o=getCustomOpts();
+  [['f-role','role'],['f-source','source']].forEach(([id,key])=>{
+    const sel=document.getElementById(id);if(!sel)return;
+    const existing=new Set([...sel.options].map(x=>x.value));
+    (o[key]||[]).forEach(v=>{if(!existing.has(v)){const opt=document.createElement('option');opt.value=v;opt.textContent=v;sel.insertBefore(opt,sel.querySelector('option:last-child'));}});
+  });
+}
+function addSelectOption(id,label){
+  const v=prompt('Add '+(id==='f-role'?'a new role needed':'a new source')+':');
+  if(v===null)return;
+  const val=v.trim();if(!val)return;
+  const sel=document.getElementById(id);
+  if([...sel.options].some(o=>o.value===val)){sel.value=val;return;}
+  const opt=document.createElement('option');opt.value=val;opt.textContent=val;
+  sel.insertBefore(opt,sel.querySelector('option:last-child'));
+  sel.value=val;
+  const key=id==='f-role'?'role':'source';
+  const o=getCustomOpts();
+  if(!o[key].includes(val))o[key].push(val);
+  saveCustomOpts(o);
+  flash(`Added "${esc(val)}" to ${label.toLowerCase()}s`);
+}
 async function api(path, body){
   const r = await fetch('/api/' + path, {
     method: body ? 'POST' : 'GET',
