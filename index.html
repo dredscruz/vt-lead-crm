@@ -321,7 +321,7 @@
 <!-- Goals Modal -->
 <div class="overlay" id="settings-overlay">
   <div class="modal" style="width:520px;max-height:86vh;overflow-y:auto">
-    <h2>⚙ Settings</h2>
+    <h2 style="display:flex;justify-content:space-between;align-items:center">⚙ Settings<button type="button" class="btn ghost" style="padding:2px 12px;font-size:16px" onclick="closeSettings()" title="Close">✕</button></h2>
     <div id="settings-body"></div>
   </div>
 </div>
@@ -627,6 +627,7 @@ function openSnippets(e){
 function closeSnippets(){document.getElementById('snip-overlay').classList.remove('open');snipOpen=false;}
 document.getElementById('snip-overlay').addEventListener('click',e=>{if(e.target.id==='snip-overlay')closeSnippets()});
 document.getElementById('goals-overlay').addEventListener('click',e=>{if(e.target.id==='goals-overlay')e.target.classList.remove('open')});
+document.getElementById('settings-overlay').addEventListener('click',e=>{if(e.target.id==='settings-overlay')closeSettings()});
 function renderSnippetList(){
   const sel=document.getElementById('snip-lead');
   const l=leads.find(function(x){return x.id===+sel.value});
@@ -1142,6 +1143,9 @@ function openSettings(){
   document.getElementById('settings-overlay').classList.add('open');
 }
 function closeSettings(){document.getElementById('settings-overlay').classList.remove('open');}
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&document.getElementById('settings-overlay').classList.contains('open'))closeSettings();
+});
 function removeCustomOpt(kind,val){
   if(!confirm(`Remove "${val}" from your ${kind} options?`))return;
   const o=getCustomOpts();
