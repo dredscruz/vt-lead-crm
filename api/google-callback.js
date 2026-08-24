@@ -43,11 +43,17 @@ export default async function handler(req, res) {
     }
 
     // fetch profile
-    const profRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+    const profRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
       headers: { Authorization: 'Bearer ' + tokens.access_token },
     });
-    const prof = await profRes.json();
-    if (!prof.email) return res.status(502).send('Could not read your Google account email.');
+    const prof = await profRes.json().catch(() => ({}));
+    if (!profRes.ok || !prof.email) {
+      console.error('userinfo failed', profRes.status, JSON.stringify(prof));
+      const why = prof.error_description || prof.error?.message || ('HTTP ' + profRes.status);
+      return res.status(502).send('Could not read your Google account email. Reason: ' + why +
+        '<br><br>If this mentions a test user, ask the app owner to add your Google account under<br>' +
+        '<b>Google Cloud Console → APIs &amp; Services → OAuth consent screen → Test users</b>.');
+    }
 
     // upsert local user (random unusable password for OAuth-only accounts)
     const salt = crypto.randomUUID();
