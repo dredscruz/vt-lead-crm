@@ -38,21 +38,29 @@ export default async function handler(req, res) {
     });
     const tokens = await tokenRes.json();
     if (!tokens.access_token) {
-      console.error('token exchange failed', tokens);
+      console.error('token exchange failed', JSON.stringify(tokens));
       return res.status(502).send('Google did not return a token. Check the OAuth client settings.');
     }
 
-    // fetch profile
-    const profRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: { Authorization: 'Bearer ' + tokens.access_token },
-    });
-    const prof = await profRes.json().catch(() => ({}));
-    if (!profRes.ok || !prof.email) {
-      console.error('userinfo failed', profRes.status, JSON.stringify(prof));
-      const why = prof.error_description || prof.error?.message || ('HTTP ' + profRes.status);
-      return res.status(502).send('Could not read your Google account email. Reason: ' + why +
-        '<br><br>If this mentions a test user, ask the app owner to add your Google account under<br>' +
-        '<b>Google Cloud Console → APIs &amp; Services → OAuth consent screen → Test users</b>.');
+    // Read profile from the OIDC id_token (avoids a second Google API call).
+    let prof = {};
+    if (tokens.id_token) {
+      try {
+        const payload = tokens.id_token.split('.')[1];
+        prof = JSON.parse(Buffer.from(payload.replace(/-/g,'+').replace(/_/g,'/'), 'base64').toString('utf8'));
+      } catch (e) { console.error('id_token decode failed', e); }
+    }
+    // Fallback to the userinfo endpoint if needed
+    if (!prof.email) {
+      const profRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: 'Bearer ' + tokens.access_token },
+      });
+      prof = await profRes.json().catch(() => ({}));
+      if (!profRes.ok || !prof.email) {
+        console.error('userinfo failed', profRes.status, JSON.stringify(prof));
+        return res.status(502).send('Could not read your Google account email. Reason: ' +
+          (prof.error_description || prof.error?.message || ('HTTP ' + profRes.status)));
+      }
     }
 
     // upsert local user (random unusable password for OAuth-only accounts)
