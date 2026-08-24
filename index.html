@@ -388,11 +388,11 @@
           <option>Medical Biller / RCM</option><option>Medical Receptionist</option>
           <option>Medical Scribe</option><option>Dental Biller</option>
           <option>Dental Coordinator</option><option>Medical Admin Support</option><option>Other</option>
-        </select><button type="button" class="btn" style="padding:0 10px" title="Add a new role" onclick="addSelectOption('f-role','New role needed')">＋</button></div></div>
+        </select><button type="button" class="btn" style="padding:0 10px" title="Add a new role" onclick="addSelectOption('f-role','New role needed')">＋</button><button type="button" class="btn" style="padding:0 10px;color:#c0392b" title="Delete the selected custom role" onclick="removeSelectOption('f-role')">🗑</button></div></div>
         <div class="field"><label>Source</label><div style="display:flex;gap:6px"><select id="f-source" style="flex:1">
           <option>Website</option><option>Instant Audit</option><option>Referral</option>
           <option>Google Ads</option><option>Cold Outreach</option><option>Event</option>
-        </select><button type="button" class="btn" style="padding:0 10px" title="Add a new source" onclick="addSelectOption('f-source','New source')">＋</button></div></div>
+        </select><button type="button" class="btn" style="padding:0 10px" title="Add a new source" onclick="addSelectOption('f-source','New source')">＋</button><button type="button" class="btn" style="padding:0 10px;color:#c0392b" title="Delete the selected custom source" onclick="removeSelectOption('f-source')">🗑</button></div></div>
       </div>
       <div class="row2">
         <div class="field"><label>Est. Deal Value ($/mo)</label><input id="f-value" type="number" min="0" step="50" placeholder="2500"></div>
@@ -1102,6 +1102,21 @@ function addSelectOption(id,label){
   if(!o[key].includes(val))o[key].push(val);
   saveCustomOpts(o);
   flash(`Added "${esc(val)}" to ${label.toLowerCase()}s`);
+}
+const BUILTIN_OPTS={f_role:['Medical Biller / RCM','Medical Receptionist','Medical Scribe','Dental Biller','Dental Coordinator','Medical Admin Support','Other'],f_source:['Website','Instant Audit','Referral','Google Ads','Cold Outreach','Event']};
+function removeSelectOption(id){
+  const sel=document.getElementById(id);
+  const val=sel.value;
+  const kind=id==='f-role'?'role':'source';
+  if(BUILTIN_OPTS[''+id.replace('-','_')].includes(val)){
+    return flash('⚠ "'+esc(val)+'" is a built-in '+kind+' and can\'t be deleted');
+  }
+  if(!confirm(`Delete "${val}" from ${kind}s? Existing leads keep their value — it's just removed from this dropdown.`))return;
+  sel.querySelector(`option[value="${CSS.escape(val)}"]`)?.remove();
+  const o=getCustomOpts();
+  o[kind]=o[kind].filter(x=>x!==val);
+  saveCustomOpts(o);
+  flash(`Deleted "${esc(val)}" from ${kind}s`);
 }
 async function api(path, body){
   const r = await fetch('/api/' + path, {
