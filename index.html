@@ -375,6 +375,14 @@
         <div class="field"><label>Next Step Due</label><input id="f-next-due" type="date"></div>
       </div>
       <div class="field"><label>Referred By (who sent them your way)</label><input id="f-ref" placeholder="e.g. Dr. Patel / Healthspan Clinic" list="ref-suggestions"><datalist id="ref-suggestions"></datalist></div>
+      <div class="field" id="timeline-wrap" style="display:none">
+        <label>Recent Activity</label>
+        <div id="lead-timeline" style="max-height:150px;overflow-y:auto;font-size:12px;line-height:1.6;color:var(--muted);border:1px solid var(--border);border-radius:9px;padding:8px 10px;background:#fbfcfd"></div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <input id="touch-note" placeholder="Just spoke to them? Log it here…" style="flex:1;border:1px solid var(--border);border-radius:9px;padding:8px 11px;font-size:13px;font-family:inherit;background:#fbfcfd">
+          <button type="button" class="btn ghost" style="padding:6px 12px;font-size:12px;flex-shrink:0" onclick="logTouchFromModal()">📞 Log touch</button>
+        </div>
+      </div>
       <div class="modal-actions">
         <button type="button" class="danger-link" id="btn-delete" onclick="deleteLead()" style="display:none">Delete lead</button>
         <button type="button" class="btn ghost" onclick="closeModal()">Cancel</button>
@@ -485,6 +493,24 @@ function leadTemp(l){
 }
 function tempBadge(l){const t=leadTemp(l);return t?`<span style="font-weight:800;font-size:11px;color:${t.color}">${t.icon} ${t.label}</span>`:'';}
 
+/* ---------------- activity log & touch clock ---------------- */
+function logActivity(l,icon,text){
+  l.activity=l.activity||[];
+  l.activity.unshift({t:Date.now(),icon:icon,text:text});
+  if(l.activity.length>60)l.activity.length=60;
+}
+function touch(l,msg){ l.lastTouch=Date.now(); logActivity(l,'📞',msg||'Touch logged'); }
+function touchDays(l){
+  const t=l.lastTouch||(l.entered&&l.entered[l.stage])||l.created||Date.now();
+  return Math.max(0,Math.round((Date.now()-t)/864e5));
+}
+function fmtWhen(t){
+  const d=Math.round((Date.now()-t)/864e5);
+  if(d===0)return 'Today';
+  if(d===1)return 'Yesterday';
+  return d+'d ago';
+}
+
 /* ---------------- duplicate detection ---------------- */
 function findDuplicate(email,name,company){
   const ne=(email||'').toLowerCase(), nn=(name||'').toLowerCase().trim(), nc=(company||'').toLowerCase().trim();
@@ -540,6 +566,7 @@ function fillSnip(t,l){
 }
 function copySnippet(i){
   const l=leads.find(function(x){return x.id===+document.getElementById('snip-lead').value});
+  if(l){touch(l,`Sent snippet “${getSnippets()[i].name}”`);save();}
   navigator.clipboard.writeText(fillSnip(getSnippets()[i].body,l))
     .then(function(){flash('Copied \u2014 paste into your email or text')})
     .catch(function(){const ta=document.createElement('textarea');ta.value=fillSnip(getSnippets()[i].body,l);document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();flash('Copied')});
@@ -558,6 +585,22 @@ function delSnippet(i){
   renderSnippetList();flash('Snippet removed');
 }
 
+/* ---------------- lead timeline ---------------- */
+function renderTimeline(l){
+  const box=document.getElementById('lead-timeline');if(!box)return;
+  const acts=(l.activity||[]).slice(0,15);
+  box.innerHTML=acts.length?
+    acts.map(a=>`<div>🕓 ${fmtWhen(a.t)} · ${esc(a.text)}</div>`).join('')
+    :'No activity yet — every stage move, touch and snippet you send will appear here.';
+}
+function logTouchFromModal(){
+  const l=leads.find(x=>x.id===editingId);if(!l)return;
+  const note=document.getElementById('touch-note').value.trim();
+  touch(l,note||'Touch logged');
+  save();renderTimeline(l);renderBoard();renderDailyAlert();
+  flash('Touch logged — follow-up clock reset');
+}
+
 /* ---------------- referral analytics ---------------- */
 function renderReferrals(){
   const refs={};leads.forEach(function(l){if(l.referredBy)refs[l.referredBy]=(refs[l.referredBy]||0)+1;});
@@ -573,9 +616,11 @@ function esc(s){ const d=document.createElement('div');d.textContent=s??'';retur
 
 function moveLead(id,toStage){
   const l=leads.find(x=>x.id===id); if(!l||l.stage===toStage)return;
+  const from=l.stage;
   if(CLOSED.includes(toStage)&&!CLOSED.includes(l.stage)) return askOutcome(id,toStage);
   l.stage=toStage;
   l.entered=l.entered||{}; l.entered[toStage]=Date.now();
+  touch(l,`Moved ${from} → ${toStage}`);
   save();renderBoard();
   flash(`"${l.name}" moved to ${toStage}`);
 }
@@ -613,6 +658,7 @@ function commitOutcome(e){
   const on=document.getElementById('outcome-notes').value.trim();
   if(on)l.notes=(l.notes?l.notes+'\n':'')+'['+(l.stage==='Closed Won'?'Won':'Lost')+'] '+on;
   l.entered=l.entered||{};l.entered[outcomeCtx.toStage]=Date.now();
+  touch(l,`Logged ${outcomeCtx.toStage==='Closed Won'?'WIN':'LOSS'}: ${r}`);
   save();closeOutcome();renderBoard();renderDailyAlert();renderCoach();
   flash(`"${l.name}" moved to ${l.stage}`);
 }
@@ -636,7 +682,7 @@ function renderStats(){
     <div class="stat"><div class="lbl">Open Value</div><div class="val">${money(open.reduce((s,l)=>s+(+l.value||0),0))}</div><div class="sub">${money(Math.round(weighted))}/mo weighted forecast</div></div>
     <div class="stat"><div class="lbl">Clients</div><div class="val">${leads.filter(l=>l.stage==='Client').length}</div><div class="sub">${money(mrr)}/mo MRR</div></div>
     <div class="stat"><div class="lbl">Win Rate</div><div class="val">${wr}%</div><div class="sub">${won.length} won vs ${lost.length} lost</div></div>
-    <div class="stat"><div class="lbl">Needs Attention</div><div class="val" style="color:${open.filter(l=>daysIn(l.stage,l)>14).length?'var(--lost)':'inherit'}">${open.filter(l=>daysIn(l.stage,l)>14).length}</div><div class="sub">stalled &gt; 14 days</div></div>`;
+    <div class="stat"><div class="lbl">Needs Attention</div><div class="val" style="color:${open.filter(l=>touchDays(l)>14).length?'var(--lost)':'inherit'}">${open.filter(l=>touchDays(l)>14).length}</div><div class="sub">no touch &gt; 14 days</div></div>`;
 }
 
 /* ---------------- modal ---------------- */
@@ -654,6 +700,9 @@ function openModal(lead=null,presetStage=null){
   g('f-value').value=lead?.value??'';g('f-notes').value=lead?.notes||'';
   g('f-next').value=lead?.nextStep||'';g('f-next-due').value=lead?.nextDue||'';
   g('f-ref').value=lead?.referredBy||'';
+  document.getElementById('timeline-wrap').style.display=lead?'':'none';
+  if(lead)renderTimeline(lead);
+  const tn=document.getElementById('touch-note');if(tn)tn.value='';
   document.getElementById('ref-suggestions').innerHTML=[...new Set(leads.map(x=>x.referredBy).filter(Boolean))].map(r=>`<option value="${esc(r)}">`).join('');
   sel.value=presetStage||lead?.stage||'Leads';
   document.getElementById('overlay').classList.add('open');
@@ -720,9 +769,9 @@ function coachAdvice(l){
       'SQLs':`Qualified — now scope it. Confirm exact role, EHR, hours, start date. Send a shortlist preview to create pull, then set a concrete next-meeting date before you hang up.`,
       'Deals':`Proposal is out — don't let it drift. Ask directly about timeline and decision-makers, surface objections now (price? fit? timing?), and offer the 30-Day Right-Fit Promise to de-risk the yes.`,
     };
-    acts.push({icon:'📞',title:`Follow-up OVERDUE (${d}d in ${l.stage}, target ≤${cad}d)`,body:byStage[l.stage]||'Reach out today.'});
+    acts.push({icon:'📞',title:`Follow-up OVERDUE (${d}d since last touch${(l.lastTouch?'':' — never touched')}, target ≤${cad}d)`,body:byStage[l.stage]||'Reach out today.'});
   } else if(!CLOSED.includes(l.stage)){
-    acts.push({icon:'✅',title:`On pace (${d}d in stage, target ≤${cad}d)`,body:`Next touch due in ${cad-d} day(s). Keep momentum: confirm the agreed next step on every interaction.`});
+    acts.push({icon:'✅',title:`On pace (${d}d since last touch, target ≤${cad}d)`,body:`Next touch due in ${cad-d} day(s). Keep momentum: confirm the agreed next step on every interaction.`});
   }
 
   // value-based priority
@@ -1017,16 +1066,17 @@ function buildDailyPlan(){
     });
   // 1) overdue follow-ups = DO NOW
   leads.filter(l=>!CLOSED.includes(l.stage)&&l.stage!=='Client')
-    .filter(l=>daysIn(l.stage,l)>CADENCE[l.stage])
-    .sort((a,b)=>daysIn(b.stage,b)-daysIn(a.stage,a))
-    .forEach(l=>items.push({when:'NOW',cls:'d-now',lead:l,
-      what:`<b>${esc(l.name)}</b>${l.company?' · '+esc(l.company):''} — ${daysIn(l.stage,l)}d in ${l.stage} (target ≤${CADENCE[l.stage]}d)`,
-      sub:{Leads:'Call now — leads decay fastest in the first week.',MQLs:'Pitch the Instant Audit and book the call.',SQLs:'Scope role/EHR/hours; send shortlist preview.',Deals:'Ask for the decision timeline; surface objections.'}[l.stage]||'Reach out today.'}));
+    .filter(l=>touchDays(l)>CADENCE[l.stage])
+    .sort((a,b)=>touchDays(b)-touchDays(a))
+    .forEach(l=>{const td=touchDays(l);const dbl=td>=CADENCE[l.stage]*2;
+      items.push({when:dbl?'🚨 NOW':'NOW',cls:'d-now',lead:l,
+      what:`<b>${esc(l.name)}</b>${l.company?' · '+esc(l.company):''} — ${td}d since last touch${l.lastTouch?'':' (never touched)'} in ${l.stage} (target ≤${CADENCE[l.stage]}d)${dbl?' <span style="color:#ffc107;font-weight:800">🚨 REALLY DUE — double cadence</span>':''}`,
+      sub:{Leads:'Call now — leads decay fastest in the first week.',MQLs:'Pitch the Instant Audit and book the call.',SQLs:'Scope role/EHR/hours; send shortlist preview.',Deals:'Ask for the decision timeline; surface objections.'}[l.stage]||'Reach out today.'})});
   // 2) due today
   leads.filter(l=>!CLOSED.includes(l.stage)&&l.stage!=='Client')
-    .filter(l=>daysIn(l.stage,l)===CADENCE[l.stage])
+    .filter(l=>touchDays(l)===CADENCE[l.stage])
     .forEach(l=>items.push({when:'TODAY',cls:'',lead:l,
-      what:`Follow up with <b>${esc(l.name)}</b>${l.company?' · '+esc(l.company):''} — ${l.stage}, ${daysIn(l.stage,l)}d since last touch`,
+      what:`Follow up with <b>${esc(l.name)}</b>${l.company?' · '+esc(l.company):''} — ${l.stage}, ${touchDays(l)}d since last touch`,
       sub:'Cadence is due today — a short touch keeps it warm.'}));
   // 3) deals sitting past cadence
   leads.filter(l=>l.stage==='Deals'&&daysIn('Deals',l)>=4)
