@@ -197,6 +197,8 @@
     <button id="nav-analytics" onclick="setView('analytics')">Analytics</button>
     <button id="nav-coach" onclick="setView('coach')">Sales Coach <span class="nav-badge" id="coach-badge" style="display:none"></span></button>
   </nav>
+  <button class="btn ghost" onclick="openSnippets(event)">✉ Snippets</button>
+  <div id="snip-menu" style="display:none;position:absolute;left:0;top:110%;background:#fff;border:1px solid var(--border);border-radius:11px;box-shadow:var(--shadow);min-width:230px;padding:6px;z-index:99"></div>
   <div class="spacer"></div>
   <button class="btn ghost" onclick="toggleMenu(event,'import-menu')">⬆ Import ▾</button>
   <div id="import-menu" style="display:none;position:absolute;right:0;top:110%;background:#fff;border:1px solid var(--border);border-radius:11px;box-shadow:var(--shadow);min-width:270px;padding:6px;z-index:99">
@@ -231,6 +233,7 @@
     <div class="panel p8"><h3>Stage Aging — average days in current stage</h3><div id="aging"></div></div>
     <div class="panel p4"><h3>Key Rates</h3><div id="rates"></div></div>
     <div class="panel p12"><h3>Win/Loss Reasons — why deals close the way they do</h3><div id="outcomes"></div></div>
+    <div class="panel p6"><h3>Referral Leaders — who sends you business</h3><div id="referrals"></div></div>
   </section>
 
   <section id="view-coach" class="analytics">
@@ -303,6 +306,24 @@
   </div>
 </div>
 
+<!-- Snippets Modal -->
+<div class="overlay" id="snip-overlay">
+  <div class="modal" style="width:560px">
+    <h2>✉ Follow-up Snippets</h2>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5">Reusable messages with merge tags — <b>{{first_name}}</b>, <b>{{company}}</b>, <b>{{role}}</b>. Pick a lead, then copy any snippet ready-to-send.</div>
+    <div class="row2">
+      <div class="field" style="grid-column:span 2"><label>Personalize for which lead?</label><select id="snip-lead"></select></div>
+    </div>
+    <div id="snip-list"></div>
+    <details style="margin-top:10px"><summary style="font-weight:700;font-size:13px;cursor:pointer;color:var(--accent)">＋ New / edit snippet</summary>
+      <div class="field" style="margin-top:10px"><label>Snippet name *</label><input id="snip-name" placeholder="e.g. Audit follow-up"></div>
+      <div class="field"><label>Message body</label><textarea id="snip-body" rows="4" placeholder="Hi {{first_name}}, ..."></textarea></div>
+      <button type="button" class="btn ghost" style="padding:6px 14px;font-size:12px" onclick="saveSnippet()">Save snippet</button>
+    </details>
+    <div class="modal-actions"><button type="button" class="btn ghost" onclick="closeSnippets()">Close</button></div>
+  </div>
+</div>
+
 <!-- Outcome Modal -->
 <div class="overlay" id="outcome-overlay">
   <div class="modal" style="width:420px">
@@ -353,6 +374,7 @@
         <div class="field"><label>Next Step (commitment)</label><input id="f-next" placeholder="e.g. Send shortlist preview"></div>
         <div class="field"><label>Next Step Due</label><input id="f-next-due" type="date"></div>
       </div>
+      <div class="field"><label>Referred By (who sent them your way)</label><input id="f-ref" placeholder="e.g. Dr. Patel / Healthspan Clinic" list="ref-suggestions"><datalist id="ref-suggestions"></datalist></div>
       <div class="modal-actions">
         <button type="button" class="danger-link" id="btn-delete" onclick="deleteLead()" style="display:none">Delete lead</button>
         <button type="button" class="btn ghost" onclick="closeModal()">Cancel</button>
@@ -424,6 +446,7 @@ function renderBoard(){
       card.innerHTML=`<div class="lc-top"><div><div class="lc-name">${esc(l.name)}</div>
         ${l.company?`<div class="lc-co">${esc(l.company)}</div>`:''}</div>
         <span class="lc-tag" style="${tagStyle(st.id)}">${shortRole(l.role)}</span></div>
+        <div class="lc-meta">${tempBadge(l)}${l.referredBy?`<span title="Referred by ${esc(l.referredBy)}">🌟 ${esc(l.referredBy.split(' ')[0].slice(0,12))}</span>`:''}</div>
         <div class="lc-meta">${l.value?`<span><b>${money(l.value)}</b>/mo</span>`:''}${l.source?`<span>· ${esc(l.source)}</span>`:''}</div>
         <div class="lc-days"><span>${l.nextStep?`<span title="${esc(l.nextStep)}" style="color:var(--accent);font-weight:700">▸ ${esc(l.nextStep.slice(0,22))}${l.nextDue?' · '+esc(l.nextDue.slice(5)):''}</span>`:''}</span>
         <span class="${(!CLOSED.includes(st.id)&&d>14)?'old':''}">${d}d in stage${!CLOSED.includes(st.id)&&d>14?' ⚠':''}</span></div>`;
@@ -447,6 +470,105 @@ function renderBoard(){
 }
 
 function shortRole(r){ return r==='Medical Biller / RCM'?'BILLER':r.replace('Medical ','').replace('Dental ','').replace(' Administrative',' ADMIN').toUpperCase().slice(0,9); }
+
+/* ---------------- lead temperature ---------------- */
+const STAGE_W={'Leads':1,'MQLs':2,'SQLs':3,'Deals':4};
+function leadTemp(l){
+  if(CLOSED.includes(l.stage))return null;
+  const cad=CADENCE[l.stage]??7;
+  const d=daysIn(l.stage,l);
+  let score=(STAGE_W[l.stage]||1)*25+(+l.value>=2500?20:+l.value/250)-Math.max(0,d-cad)*8;
+  if(d<=1&&STAGE_W[l.stage])score+=10;
+  if(score>=55)return {icon:'\U0001F525',label:'Hot',color:'var(--lost)'};
+  if(score>=30)return {icon:'\U0001F7E1',label:'Warm',color:'#b45309'};
+  return {icon:'\u2744\uFE0F',label:'Cooling',color:'var(--sql)'};
+}
+function tempBadge(l){const t=leadTemp(l);return t?`<span style="font-weight:800;font-size:11px;color:${t.color}">${t.icon} ${t.label}</span>`:'';}
+
+/* ---------------- duplicate detection ---------------- */
+function findDuplicate(email,name,company){
+  const ne=(email||'').toLowerCase(), nn=(name||'').toLowerCase().trim(), nc=(company||'').toLowerCase().trim();
+  for(const l of leads){
+    const why=[];
+    if(ne&&(l.email||'').toLowerCase()===ne)why.push('email');
+    if(nn&&nc&&(l.name||'').toLowerCase()===nn&&(l.company||'').toLowerCase()===nc)why.push('name + company');
+    else if(nn&&(l.name||'').toLowerCase()===nn&&!nc&&!((l.company||'').trim()))why.push('name');
+    if(why.length)return Object.assign({},l,{_why:why.join(', ')});
+  }
+  return null;
+}
+
+/* ---------------- snippets ---------------- */
+const SNIP_KEY='vt_lead_snippets_v1';
+const DEFAULT_SNIPPETS=[
+  {name:'Instant Audit offer',body:"Hi {{first_name}}, thanks for the chat about {{company}}! Based on what you shared, I think our free Instant Audit could show real numbers \u2014 most practices are surprised what it uncovers. Want me to run it this week? No strings attached."},
+  {name:'Post-call follow-up',body:"Hi {{first_name}}, great speaking with you today. Quick recap: you're looking for a {{role}} for {{company}}. I'll put together a shortlist of right-fit teammates and send it over by [day]. Anything else I should factor in?"},
+  {name:'Break-up email',body:"Hi {{first_name}}, I've reached out a few times about {{company}} and don't want to clutter your inbox \u2014 should I close your file for now? If timing's wrong, no hard feelings; I'll check back in a few months."},
+  {name:'Referral ask (clients)',body:"Hi {{first_name}}, hope things at {{company}} are going well! Quick favor \u2014 do you know 1\u20132 other practice owners who could use a great {{role}}? A warm intro means a lot, and we take extra care of referred practices."}
+];
+function getSnippets(){try{return JSON.parse(localStorage.getItem(SNIP_KEY))||DEFAULT_SNIPPETS}catch(e){return DEFAULT_SNIPPETS}}
+let snipOpen=false;
+function openSnippets(e){
+  e.stopPropagation();
+  document.getElementById('export-menu').style.display='none';
+  const im=document.getElementById('import-menu');if(im)im.style.display='none';
+  snipOpen=true;
+  const sel=document.getElementById('snip-lead');
+  sel.innerHTML=leads.filter(function(l){return !CLOSED.includes(l.stage)}).map(function(l){return '<option value="'+l.id+'">'+esc(l.name)+(l.company?' \u00b7 '+esc(l.company):'')+'</option>'}).join('')||'<option value="">\u2014 no open leads \u2014</option>';
+  renderSnippetList();
+  document.getElementById('snip-overlay').classList.add('open');
+}
+function closeSnippets(){document.getElementById('snip-overlay').classList.remove('open');snipOpen=false;}
+function renderSnippetList(){
+  const sel=document.getElementById('snip-lead');
+  const l=leads.find(function(x){return x.id===+sel.value});
+  document.getElementById('snip-list').innerHTML=getSnippets().map(function(s,i){
+    return '<div style="border:1px solid var(--border);border-radius:11px;padding:12px;margin-bottom:10px;background:#fbfcfd">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
+      '<b style="font-size:13px">'+esc(s.name)+'</b>'+
+      '<div style="display:flex;gap:6px">'+
+      '<button type="button" class="btn" style="padding:4px 12px;font-size:11.5px" onclick="copySnippet('+i+')">Copy</button>'+
+      '<button type="button" class="btn ghost" style="padding:4px 12px;font-size:11.5px" onclick="delSnippet('+i+')">\u2715</button></div></div>'+
+      '<div style="font-size:12.5px;color:var(--muted);line-height:1.5;white-space:pre-wrap">'+esc(fillSnip(s.body,l))+'</div></div>';
+  }).join('')||'<div class="empty">No snippets yet \u2014 add one below.</div>';
+}
+function fillSnip(t,l){
+  return String(t||'')
+    .replace(/{{\s*first_name\s*}}/g,l?(l.name||'').split(' ')[0]:'[first name]')
+    .replace(/{{\s*company\s*}}/g,(l&&l.company)||'[company]')
+    .replace(/{{\s*role\s*}}/g,(l&&l.role)||'[role]');
+}
+function copySnippet(i){
+  const l=leads.find(function(x){return x.id===+document.getElementById('snip-lead').value});
+  navigator.clipboard.writeText(fillSnip(getSnippets()[i].body,l))
+    .then(function(){flash('Copied \u2014 paste into your email or text')})
+    .catch(function(){const ta=document.createElement('textarea');ta.value=fillSnip(getSnippets()[i].body,l);document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();flash('Copied')});
+}
+function saveSnippet(){
+  const n=document.getElementById('snip-name').value.trim(), b=document.getElementById('snip-body').value.trim();
+  if(!n||!b)return flash('Give the snippet a name and body');
+  const all=getSnippets();all.unshift({name:n,body:b});
+  localStorage.setItem(SNIP_KEY,JSON.stringify(all));
+  document.getElementById('snip-name').value='';document.getElementById('snip-body').value='';
+  renderSnippetList();flash('Snippet saved');
+}
+function delSnippet(i){
+  const all=getSnippets();all.splice(i,1);
+  localStorage.setItem(SNIP_KEY,JSON.stringify(all));
+  renderSnippetList();flash('Snippet removed');
+}
+
+/* ---------------- referral analytics ---------------- */
+function renderReferrals(){
+  const refs={};leads.forEach(function(l){if(l.referredBy)refs[l.referredBy]=(refs[l.referredBy]||0)+1;});
+  const box=document.getElementById('referrals');
+  if(!box)return;
+  const entries=Object.entries(refs).sort(function(a,b){return b[1]-a[1]});
+  box.innerHTML=entries.length?
+    entries.map(function(en){return '<div class="funnel-row"><div class="funnel-label" style="width:170px;text-align:left">'+esc(en[0])+'</div>'+
+      '<div class="funnel-bar-wrap"><div class="funnel-bar" style="width:'+(en[1]/entries[0][1]*100)+'%;height:26px;background:#3aa76d">'+en[1]+' lead'+(en[1]===1?'':'s')+'</div></div></div>'}).join('')
+    :'<div class="empty">No referral sources logged yet \u2014 set "Referred By" on a lead to see who sends you business.</div>';
+}
 function esc(s){ const d=document.createElement('div');d.textContent=s??'';return d.innerHTML; }
 
 function moveLead(id,toStage){
@@ -531,6 +653,8 @@ function openModal(lead=null,presetStage=null){
   g('f-source').value=lead?.source||g('f-source').options[0].value;
   g('f-value').value=lead?.value??'';g('f-notes').value=lead?.notes||'';
   g('f-next').value=lead?.nextStep||'';g('f-next-due').value=lead?.nextDue||'';
+  g('f-ref').value=lead?.referredBy||'';
+  document.getElementById('ref-suggestions').innerHTML=[...new Set(leads.map(x=>x.referredBy).filter(Boolean))].map(r=>`<option value="${esc(r)}">`).join('');
   sel.value=presetStage||lead?.stage||'Leads';
   document.getElementById('overlay').classList.add('open');
   setTimeout(()=>g('f-name').focus(),50);
@@ -548,12 +672,14 @@ function saveLead(e){
     if(l.stage!==stage){l.entered=l.entered||{};l.entered[stage]=Date.now();}
     Object.assign(l,{name:g('f-name'),company:g('f-company'),email:g('f-email'),phone:g('f-phone'),
       role:g('f-role'),source:g('f-source'),value:+g('f-value')||0,stage,notes:g('f-notes'),
-      nextStep:g('f-next'),nextDue:g('f-next-due')||null});
+      nextStep:g('f-next'),nextDue:g('f-next-due')||null,referredBy:g('f-ref')});
   }else{
+    const dup=findDuplicate(g('f-email'),g('f-name'),g('f-company'));
+    if(dup&&!confirm(`Heads up: "${dup.name}${dup.company?' · '+dup.company:''}" already looks like this lead (matching ${dup._why}). Add anyway?`))return;
     leads.push({id:uid(),name:g('f-name'),company:g('f-company'),email:g('f-email'),phone:g('f-phone'),
       role:g('f-role'),source:g('f-source'),value:+g('f-value')||0,stage,
       entered:{[stage]:Date.now()},notes:g('f-notes'),created:Date.now(),
-      nextStep:g('f-next'),nextDue:g('f-next-due')||null});
+      nextStep:g('f-next'),nextDue:g('f-next-due')||null,referredBy:g('f-ref')});
   }
   save();closeModal();renderBoard();flash(editingId?'Lead updated':'Lead added');
 }
@@ -712,6 +838,8 @@ function renderAnalytics(){
   document.getElementById('rates').innerHTML=rows.map(([k,v])=>
     `<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #efece3;font-size:13px">
      <span style="color:var(--muted);font-weight:600">${k}</span><b style="font-size:15px">${v}</b></div>`).join('');
+
+  renderReferrals();
 
   // win/loss reasons
   const closedLeads=leads.filter(l=>CLOSED.includes(l.stage)&&l.outcome);
