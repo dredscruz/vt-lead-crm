@@ -230,6 +230,7 @@
     <div class="panel p6"><h3>Leads by Source</h3><div id="sources"></div></div>
     <div class="panel p8"><h3>Stage Aging — average days in current stage</h3><div id="aging"></div></div>
     <div class="panel p4"><h3>Key Rates</h3><div id="rates"></div></div>
+    <div class="panel p12"><h3>Win/Loss Reasons — why deals close the way they do</h3><div id="outcomes"></div></div>
   </section>
 
   <section id="view-coach" class="analytics">
@@ -302,6 +303,22 @@
   </div>
 </div>
 
+<!-- Outcome Modal -->
+<div class="overlay" id="outcome-overlay">
+  <div class="modal" style="width:420px">
+    <h2 id="outcome-title">What happened with this deal?</h2>
+    <form onsubmit="commitOutcome(event)">
+      <div class="field"><label>Reason *</label><select id="outcome-reason" onchange="outcomeReasonChanged()"></select></div>
+      <div class="field" id="outcome-other-wrap" style="display:none"><label>Tell me more</label><input id="outcome-other" placeholder="Describe the reason"></div>
+      <div class="field"><label>Notes (optional)</label><textarea id="outcome-notes" rows="2"></textarea></div>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" onclick="closeOutcome()">Cancel</button>
+        <button type="submit" class="btn">Log it</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- Lead Modal -->
 <div class="overlay" id="overlay">
   <div class="modal">
@@ -332,6 +349,10 @@
         <div class="field"><label>Stage</label><select id="f-stage"></select></div>
       </div>
       <div class="field"><label>Notes</label><textarea id="f-notes" rows="3" placeholder="Context, pain points, next steps..."></textarea></div>
+      <div class="row2">
+        <div class="field"><label>Next Step (commitment)</label><input id="f-next" placeholder="e.g. Send shortlist preview"></div>
+        <div class="field"><label>Next Step Due</label><input id="f-next-due" type="date"></div>
+      </div>
       <div class="modal-actions">
         <button type="button" class="danger-link" id="btn-delete" onclick="deleteLead()" style="display:none">Delete lead</button>
         <button type="button" class="btn ghost" onclick="closeModal()">Cancel</button>
@@ -404,7 +425,7 @@ function renderBoard(){
         ${l.company?`<div class="lc-co">${esc(l.company)}</div>`:''}</div>
         <span class="lc-tag" style="${tagStyle(st.id)}">${shortRole(l.role)}</span></div>
         <div class="lc-meta">${l.value?`<span><b>${money(l.value)}</b>/mo</span>`:''}${l.source?`<span>· ${esc(l.source)}</span>`:''}</div>
-        <div class="lc-days"><span>${st.id==='Client'?esc((l.role||'').split(' ')[0]+' teammate'):''}</span>
+        <div class="lc-days"><span>${l.nextStep?`<span title="${esc(l.nextStep)}" style="color:var(--accent);font-weight:700">▸ ${esc(l.nextStep.slice(0,22))}${l.nextDue?' · '+esc(l.nextDue.slice(5)):''}</span>`:''}</span>
         <span class="${(!CLOSED.includes(st.id)&&d>14)?'old':''}">${d}d in stage${!CLOSED.includes(st.id)&&d>14?' ⚠':''}</span></div>`;
       card.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain',l.id);card.classList.add('dragging')});
       card.addEventListener('dragend',()=>card.classList.remove('dragging'));
@@ -430,10 +451,48 @@ function esc(s){ const d=document.createElement('div');d.textContent=s??'';retur
 
 function moveLead(id,toStage){
   const l=leads.find(x=>x.id===id); if(!l||l.stage===toStage)return;
+  if(CLOSED.includes(toStage)&&!CLOSED.includes(l.stage)) return askOutcome(id,toStage);
   l.stage=toStage;
   l.entered=l.entered||{}; l.entered[toStage]=Date.now();
   save();renderBoard();
   flash(`"${l.name}" moved to ${toStage}`);
+}
+
+/* ---------------- outcome capture (win/loss reason) ---------------- */
+const OUTCOME_REASONS={
+  'Closed Won':['Price accepted','Speed / availability of teammate','Trust & rapport','Referral or reputation','Right-Fit Promise de-risked it'],
+  'Closed Lost':['Price / budget','Went with a competitor','Timing not right','Hired in-house','No response / went cold','Bad fit (role or specialty)'],
+};
+let outcomeCtx=null;
+function askOutcome(id,toStage){
+  const l=leads.find(x=>x.id===id);if(!l)return;
+  outcomeCtx={id,toStage};
+  document.getElementById('outcome-title').textContent=toStage==='Closed Won'?'🎉 Won! What made them say yes?':'What happened with this deal?';
+  const reasons=OUTCOME_REASONS[toStage];
+  const sel=document.getElementById('outcome-reason');
+  sel.innerHTML='<option value="">— Select a reason —</option>'+reasons.map(r=>`<option>${r}</option>`).join('')+`<option value="__other">Other…</option>`;
+  document.getElementById('outcome-other-wrap').style.display='none';
+  document.getElementById('outcome-other').value=l.outcomeDetail||'';
+  document.getElementById('outcome-overlay').classList.add('open');
+}
+function closeOutcome(){document.getElementById('outcome-overlay').classList.remove('open');}
+function outcomeReasonChanged(){
+  const v=document.getElementById('outcome-reason').value;
+  document.getElementById('outcome-other-wrap').style.display=v==='__other'?'':'none';
+}
+function commitOutcome(e){
+  e.preventDefault();
+  const l=leads.find(x=>x.id===outcomeCtx.id);
+  let r=document.getElementById('outcome-reason').value;
+  const other=document.getElementById('outcome-other').value.trim();
+  if(r==='__other')r=other||'Other';
+  if(!r)return flash('Pick a reason first — or hit Cancel to just move the card.');
+  l.stage=outcomeCtx.toStage;l.outcome=r;if(other&&r!==other)l.outcomeDetail=other;
+  const on=document.getElementById('outcome-notes').value.trim();
+  if(on)l.notes=(l.notes?l.notes+'\n':'')+'['+(l.stage==='Closed Won'?'Won':'Lost')+'] '+on;
+  l.entered=l.entered||{};l.entered[outcomeCtx.toStage]=Date.now();
+  save();closeOutcome();renderBoard();renderDailyAlert();renderCoach();
+  flash(`"${l.name}" moved to ${l.stage}`);
 }
 function flash(msg){
   const t=document.createElement('div');t.textContent=msg;
@@ -448,9 +507,11 @@ function renderStats(){
   const open=leads.filter(l=>!CLOSED.concat('Client').includes(l.stage));
   const mrr=won.reduce((s,l)=>s+(+l.value||0),0);
   const wr=(won.length+lost.length)?Math.round(won.length/(won.length+lost.length)*100):0;
+  const PROB={'Leads':.1,'MQLs':.25,'SQLs':.5,'Deals':.7};
+  const weighted=open.reduce((s,l)=>s+(+l.value||0)*(PROB[l.stage]??0),0);
   document.getElementById('stats').innerHTML=`
     <div class="stat"><div class="lbl">Open Pipeline</div><div class="val">${open.length}</div><div class="sub">active leads</div></div>
-    <div class="stat"><div class="lbl">Open Value</div><div class="val">${money(open.reduce((s,l)=>s+(+l.value||0),0))}</div><div class="sub">per month</div></div>
+    <div class="stat"><div class="lbl">Open Value</div><div class="val">${money(open.reduce((s,l)=>s+(+l.value||0),0))}</div><div class="sub">${money(Math.round(weighted))}/mo weighted forecast</div></div>
     <div class="stat"><div class="lbl">Clients</div><div class="val">${leads.filter(l=>l.stage==='Client').length}</div><div class="sub">${money(mrr)}/mo MRR</div></div>
     <div class="stat"><div class="lbl">Win Rate</div><div class="val">${wr}%</div><div class="sub">${won.length} won vs ${lost.length} lost</div></div>
     <div class="stat"><div class="lbl">Needs Attention</div><div class="val" style="color:${open.filter(l=>daysIn(l.stage,l)>14).length?'var(--lost)':'inherit'}">${open.filter(l=>daysIn(l.stage,l)>14).length}</div><div class="sub">stalled &gt; 14 days</div></div>`;
@@ -469,6 +530,7 @@ function openModal(lead=null,presetStage=null){
   g('f-email').value=lead?.email||'';g('f-phone').value=lead?.phone||'';g('f-role').value=lead?.role||g('f-role').options[0].value;
   g('f-source').value=lead?.source||g('f-source').options[0].value;
   g('f-value').value=lead?.value??'';g('f-notes').value=lead?.notes||'';
+  g('f-next').value=lead?.nextStep||'';g('f-next-due').value=lead?.nextDue||'';
   sel.value=presetStage||lead?.stage||'Leads';
   document.getElementById('overlay').classList.add('open');
   setTimeout(()=>g('f-name').focus(),50);
@@ -485,11 +547,13 @@ function saveLead(e){
     const l=leads.find(x=>x.id===editingId);
     if(l.stage!==stage){l.entered=l.entered||{};l.entered[stage]=Date.now();}
     Object.assign(l,{name:g('f-name'),company:g('f-company'),email:g('f-email'),phone:g('f-phone'),
-      role:g('f-role'),source:g('f-source'),value:+g('f-value')||0,stage,notes:g('f-notes')});
+      role:g('f-role'),source:g('f-source'),value:+g('f-value')||0,stage,notes:g('f-notes'),
+      nextStep:g('f-next'),nextDue:g('f-next-due')||null});
   }else{
     leads.push({id:uid(),name:g('f-name'),company:g('f-company'),email:g('f-email'),phone:g('f-phone'),
       role:g('f-role'),source:g('f-source'),value:+g('f-value')||0,stage,
-      entered:{[stage]:Date.now()},notes:g('f-notes'),created:Date.now()});
+      entered:{[stage]:Date.now()},notes:g('f-notes'),created:Date.now(),
+      nextStep:g('f-next'),nextDue:g('f-next-due')||null});
   }
   save();closeModal();renderBoard();flash(editingId?'Lead updated':'Lead added');
 }
@@ -648,6 +712,24 @@ function renderAnalytics(){
   document.getElementById('rates').innerHTML=rows.map(([k,v])=>
     `<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #efece3;font-size:13px">
      <span style="color:var(--muted);font-weight:600">${k}</span><b style="font-size:15px">${v}</b></div>`).join('');
+
+  // win/loss reasons
+  const closedLeads=leads.filter(l=>CLOSED.includes(l.stage)&&l.outcome);
+  const box=document.getElementById('outcomes');
+  if(!closedLeads.length){box.innerHTML='<div class="empty">No outcome reasons logged yet — drag a deal to Closed Won or Closed Lost and you\'ll be asked why. Over time this shows exactly where deals are won and lost.</div>';}
+  else{
+    const groups={};
+    closedLeads.forEach(l=>{const k=l.stage==='Closed Won'?'Won':'Lost';(groups[k]=groups[k]||{})[l.outcome]=(groups[k][l.outcome]||0)+1;});
+    box.innerHTML=Object.entries(groups).map(([k,rs])=>{
+      const total=Object.values(rs).reduce((s,n)=>s+n,0);
+      const max=Math.max(...Object.values(rs));
+      return `<div style="margin-bottom:14px"><div style="font-weight:800;font-size:13px;margin-bottom:8px;color:${k==='Won'?'var(--won)':'var(--lost)'}">${k} (${total})</div>`+
+        Object.entries(rs).sort((a,b)=>b[1]-a[1]).map(([r,n])=>
+          `<div class="funnel-row"><div class="funnel-label" style="width:190px;text-align:left">${esc(r)}</div>
+           <div class="funnel-bar-wrap"><div class="funnel-bar" style="width:${n/max*100}%;height:26px;background:${k==='Won'?'var(--won)':'var(--lost)'}">${n}</div></div>
+           <div class="conv-note">${Math.round(n/total*100)}%</div></div>`).join('')+`</div>`;
+    }).join('');
+  }
 }
 function pct(a,b){return b?Math.round(a/b*100)+'%':'—'}
 function avgVal(){const v=leads.filter(l=>l.value);return v.length?Math.round(v.reduce((s,l)=>s+(+l.value),0)/v.length):0}
@@ -797,6 +879,14 @@ async function pushToServer(){
 function buildDailyPlan(){
   const today=new Date();today.setHours(0,0,0,0);
   const items=[];
+  // 0) committed next steps due (or overdue)
+  leads.filter(l=>!CLOSED.includes(l.stage)&&l.nextStep&&l.nextDue)
+    .forEach(l=>{
+      const due=new Date(l.nextDue+'T00:00:00');const diff=Math.round((due-today)/864e5);
+      if(diff<=0)items.push({when:diff<0?'OVERDUE':'TODAY',cls:diff<0?'d-now':'',lead:l,
+        what:`Next step for <b>${esc(l.name)}</b>${l.company?' · '+esc(l.company):''}: ${esc(l.nextStep)}`,
+        sub:(diff<0?`Was due ${-diff} day${diff===-1?'':'s'} ago. `:'Committed to the lead — do it today. ')+`Clear it in the lead card when done.`});
+    });
   // 1) overdue follow-ups = DO NOW
   leads.filter(l=>!CLOSED.includes(l.stage)&&l.stage!=='Client')
     .filter(l=>daysIn(l.stage,l)>CADENCE[l.stage])
