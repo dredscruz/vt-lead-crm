@@ -223,6 +223,7 @@
 <main>
   <section id="view-board">
     <div class="stats" id="stats"></div>
+    <div class="panel p12" id="goals-panel" style="margin-bottom:18px"></div>
     <div class="board" id="board"></div>
   </section>
 
@@ -302,6 +303,24 @@
       <div style="font-weight:800;font-size:16px;margin:8px 0">Leads pushed!</div>
       <div id="push-result" style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.5"></div>
       <a id="push-open-link" class="btn" style="display:inline-block;text-decoration:none" target="_blank">Open the Google Sheet</a>
+    </div>
+  </div>
+</div>
+
+<!-- Goals Modal -->
+<div class="overlay" id="goals-overlay">
+  <div class="modal" style="width:420px">
+    <h2>\uD83C\uDFAF Monthly Targets</h2>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Set your defaults — progress bars on the Pipeline view track the current calendar month automatically.</div>
+    <div class="row2">
+      <div class="field"><label>New leads added</label><input id="gl-leads" type="number" min="1"></div>
+      <div class="field"><label>Touches logged</label><input id="gl-touches" type="number" min="1"></div>
+      <div class="field"><label>Deals won</label><input id="gl-wins" type="number" min="1"></div>
+      <div class="field"><label>New MRR ($)</label><input id="gl-mrr" type="number" min="50" step="50"></div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" onclick="document.getElementById('goals-overlay').classList.remove('open')">Cancel</button>
+      <button type="button" class="btn" onclick="saveGoals()">Save targets</button>
     </div>
   </div>
 </div>
@@ -493,6 +512,50 @@ function leadTemp(l){
 }
 function tempBadge(l){const t=leadTemp(l);return t?`<span style="font-weight:800;font-size:11px;color:${t.color}">${t.icon} ${t.label}</span>`:'';}
 
+/* ---------------- monthly goals ---------------- */
+const GOALS_KEY='vt_lead_goals_v1';
+function getGoals(){try{return JSON.parse(localStorage.getItem(GOALS_KEY))||{}}catch(e){return {}}}
+function monthKey(d){return (d||new Date()).toISOString().slice(0,7)}
+function thisMonthGoals(){
+  const g=getGoals();
+  return {
+    leads:+(g[monthKey()]?.leads ?? g.defaults?.leads ?? 10),
+    touches:+(g[monthKey()]?.touches ?? g.defaults?.touches ?? 40),
+    wins:+(g[monthKey()]?.wins ?? g.defaults?.wins ?? 3),
+    mrr:+(g[monthKey()]?.mrr ?? g.defaults?.mrr ?? 5000),
+  };
+}
+function setGoalDefaults(leads,touches,wins,mrr){
+  const g=getGoals();
+  g.defaults={leads,touches,wins,mrr};
+  localStorage.setItem(GOALS_KEY,JSON.stringify(g));
+  renderStats();
+}
+function monthProgress(){
+  const now=new Date(),mk=monthKey();
+  const inMonth=t=>new Date(t).toISOString().slice(0,7)===mk;
+  const leadsAdded=leads.filter(l=>inMonth(l.created||0)).length;
+  let touches=0,wins=0,mrrNew=0;
+  leads.forEach(l=>{
+    if(l.lastTouch&&inMonth(l.lastTouch))touches++;
+    (l.activity||[]).forEach(a=>{if(a.icon==='\uD83D\uDCDE'&&inMonth(a.t))touches++;});
+    if(l.outcome&&(l.entered&&l.entered[l.stage]&&inMonth(l.entered[l.stage]))){
+      if(l.stage==='Closed Won'||l.stage==='Client'){wins++;mrrNew+=+l.value||0;}
+    }
+  });
+  return {leadsAdded,touches,wins,mrrNew};
+}
+function goalBar(label,got,goal,fmt){
+  const pctv=Math.min(100,Math.round(got/goal*100));
+  const done=pctv>=100;
+  return `<div style="margin-bottom:10px">
+    <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+      <span style="font-weight:700">${label}${done?' \u2705':''}</span>
+      <span style="color:var(--muted)">${fmt(got)} / ${fmt(goal)}</span></div>
+    <div style="height:9px;background:#efece3;border-radius:99px;overflow:hidden">
+      <div style="height:100%;width:${pctv}%;background:${done?'var(--won)':pctv>=60?'var(--gold-deep)':'var(--accent)'};border-radius:99px"></div></div></div>`;
+}
+
 /* ---------------- activity log & touch clock ---------------- */
 function logActivity(l,icon,text){
   l.activity=l.activity||[];
@@ -545,6 +608,8 @@ function openSnippets(e){
   document.getElementById('snip-overlay').classList.add('open');
 }
 function closeSnippets(){document.getElementById('snip-overlay').classList.remove('open');snipOpen=false;}
+document.getElementById('snip-overlay').addEventListener('click',e=>{if(e.target.id==='snip-overlay')closeSnippets()});
+document.getElementById('goals-overlay').addEventListener('click',e=>{if(e.target.id==='goals-overlay')e.target.classList.remove('open')});
 function renderSnippetList(){
   const sel=document.getElementById('snip-lead');
   const l=leads.find(function(x){return x.id===+sel.value});
@@ -677,12 +742,47 @@ function renderStats(){
   const wr=(won.length+lost.length)?Math.round(won.length/(won.length+lost.length)*100):0;
   const PROB={'Leads':.1,'MQLs':.25,'SQLs':.5,'Deals':.7};
   const weighted=open.reduce((s,l)=>s+(+l.value||0)*(PROB[l.stage]??0),0);
+  const g2=thisMonthGoals(),openMRR=leads.filter(l=>l.stage==='Client').reduce((s,l)=>s+(+l.value||0),0)||g2.mrr;
+  const cov=(open.reduce((s,l)=>s+(+l.value||0),0)/(g2.mrr||1));
   document.getElementById('stats').innerHTML=`
     <div class="stat"><div class="lbl">Open Pipeline</div><div class="val">${open.length}</div><div class="sub">active leads</div></div>
     <div class="stat"><div class="lbl">Open Value</div><div class="val">${money(open.reduce((s,l)=>s+(+l.value||0),0))}</div><div class="sub">${money(Math.round(weighted))}/mo weighted forecast</div></div>
     <div class="stat"><div class="lbl">Clients</div><div class="val">${leads.filter(l=>l.stage==='Client').length}</div><div class="sub">${money(mrr)}/mo MRR</div></div>
     <div class="stat"><div class="lbl">Win Rate</div><div class="val">${wr}%</div><div class="sub">${won.length} won vs ${lost.length} lost</div></div>
-    <div class="stat"><div class="lbl">Needs Attention</div><div class="val" style="color:${open.filter(l=>touchDays(l)>14).length?'var(--lost)':'inherit'}">${open.filter(l=>touchDays(l)>14).length}</div><div class="sub">no touch &gt; 14 days</div></div>`;
+    <div class="stat"><div class="lbl">Needs Attention</div><div class="val" style="color:${open.filter(l=>touchDays(l)>14).length?'var(--lost)':'inherit'}">${open.filter(l=>touchDays(l)>14).length}</div><div class="sub">no touch &gt; 14 days</div></div>
+    <div class="stat"><div class="lbl">Pipeline Coverage</div><div class="val" style="color:${cov>=3?'var(--won)':cov>=1.5?'#b45309':'var(--lost)'}">${openMRR?cov.toFixed(1)+'x':'\u2014'}</div><div class="sub">${openMRR?money(Math.round(cov*100))+'% of MRR goal open':'vs '+money(g2.mrr)+' MRR target'}</div></div>`;
+  renderGoalsPanel();
+}
+
+function renderGoalsPanel(){
+  const el=document.getElementById('goals-panel');if(!el)return;
+  const g=thisMonthGoals(),p=monthProgress();
+  el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <h3 style="font-size:13.5px">\uD83C\uDFAF This Month's Progress</h3>
+    <button type="button" class="btn ghost" style="padding:5px 12px;font-size:11.5px" onclick="openGoals()">Edit targets</button></div>
+   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px 24px">
+    ${goalBar('New leads',p.leadsAdded,g.leads,v=>v)}
+    ${goalBar('Touches logged',p.touches,g.touches,v=>v)}
+    ${goalBar('Deals won',p.wins,g.wins,v=>v)}
+    ${goalBar('New MRR',p.mrrNew,g.mrr,v=>money(v))}
+   </div>`;
+}
+function openGoals(){
+  const g=thisMonthGoals();
+  document.getElementById('gl-leads').value=g.leads;
+  document.getElementById('gl-touches').value=g.touches;
+  document.getElementById('gl-wins').value=g.wins;
+  document.getElementById('gl-mrr').value=g.mrr;
+  document.getElementById('goals-overlay').classList.add('open');
+}
+function saveGoals(){
+  setGoalDefaults(
+    Math.max(1,+document.getElementById('gl-leads').value||10),
+    Math.max(1,+document.getElementById('gl-touches').value||40),
+    Math.max(1,+document.getElementById('gl-wins').value||3),
+    Math.max(50,+document.getElementById('gl-mrr').value||5000));
+  document.getElementById('goals-overlay').classList.remove('open');
+  flash('Targets saved');
 }
 
 /* ---------------- modal ---------------- */
@@ -816,7 +916,8 @@ function renderCoach(){
       <div style="font-size:12px;font-weight:700">due within cadence</div></div>
     <div style="flex:2.2;min-width:260px;padding:6px 4px;font-size:13px;line-height:1.55;color:var(--muted)">
       ${nowN?'Start at the top red card — that deal is decaying daily. ':'Nothing overdue — use the spare time on high-value 💎 leads and Client check-ins. '}
-      Cadence targets: Lead <b>3d</b> · MQL <b>5d</b> · SQL <b>7d</b> · Deal <b>4d</b>. Every touch should end with a scheduled next step.</div>
+      Cadence targets: Lead <b>3d</b> · MQL <b>5d</b> · SQL <b>7d</b> · Deal <b>4d</b>. Every touch should end with a scheduled next step.
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid #efece3">\uD83C\uDFAF This month: <b>${monthProgress().touches}</b> touches logged \u2014 goal ${thisMonthGoals().touches}. Keep logging and the bars fill themselves.</div></div>
    </div>`;
 
   document.getElementById('coach-list').innerHTML=scored.map(({l,acts,urgency})=>`
@@ -874,6 +975,19 @@ function renderAnalytics(){
     return `<div class="funnel-row"><div class="funnel-label">${st.id}</div>
       <div class="funnel-bar-wrap"><div class="funnel-bar" style="width:${avg/amax*100}%;height:26px;background:${avg>14?'var(--lost)':st.color}">${it.length?Math.round(avg)+'d avg':''}</div></div>
       <div class="conv-note">${it.length} lead${it.length===1?'':'s'}</div></div>`}).join('');
+
+  // actual stage win-probabilities from real outcomes
+  const stagesChain=['Leads','MQLs','SQLs','Deals'];
+  const reached=stage=>leads.filter(l=>{
+    const chain=stagesChain.slice(0,stagesChain.indexOf(stage)+1);
+    return l.entered&&chain.every(st=>l.entered[st]);
+  });
+  const actualRows=stagesChain.map(st=>{
+    const r=reached(st);
+    const w=r.filter(l=>['Closed Won','Client'].includes(l.stage)).length;
+    return [st+' \u2192 Won (actual)',r.length?pct(w,r.length):'\u2014'];
+  });
+  rows.push(...actualRows);
 
   // rates
   const won=leads.filter(l=>['Closed Won','Client'].includes(l.stage)).length;
@@ -1103,8 +1217,13 @@ function renderDailyAlert(){
   el.innerHTML=`<h3>🔔 Today's Plan — ${d} · ${plan.length} action${plan.length>1?'s':''}</h3>`+
     plan.map(i=>`<div class="daily-item ${i.cls}">
       <span class="d-time">${i.when}</span>
-      <div class="d-body">${i.what}<div class="d-sub">${i.sub||''}</div></div></div>`).join('');
+      <div class="d-body">${i.what}<div class="d-sub">${i.sub||''}</div>${i.lead?`<button type="button" onclick="event.stopPropagation();quickLog(${i.lead.id})" style="margin-top:6px;background:none;border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:8px;padding:4px 12px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit">\uD83D\uDCDE Log touch</button>`:''}</div></div>`).join('');
   updateNavBadge(plan.filter(i=>i.when==='NOW').length);
+}
+async function quickLog(id){
+  const l=leads.find(x=>x.id===id);if(!l)return;
+  touch(l,'Touch logged from plan');
+  save();renderDailyAlert();renderBoard();renderCoach();flash(`\u2705 Touch logged for ${l.name} \u2014 clock reset`);
 }
 function updateNavBadge(n){
   const b=document.getElementById('coach-badge');
