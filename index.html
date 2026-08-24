@@ -1079,7 +1079,7 @@ function copySummary(){
 /* ---------------- AUTH (server-backed) ---------------- */
 const CUSTOM_OPTS_KEY='vt_lead_custom_options_v1';
 function getCustomOpts(){try{return JSON.parse(localStorage.getItem(CUSTOM_OPTS_KEY))||{role:[],source:[]}}catch(e){return {role:[],source:[]}}}
-function saveCustomOpts(o){localStorage.setItem(CUSTOM_OPTS_KEY,JSON.stringify(o))}
+function saveCustomOpts(o){localStorage.setItem(CUSTOM_OPTS_KEY,JSON.stringify(o));scheduleSync();}
 function applyCustomOptions(){
   const o=getCustomOpts();
   [['f-role','role'],['f-source','source']].forEach(([id,key])=>{
@@ -1186,6 +1186,7 @@ function collectSettings(){
   try{return {
     goals:JSON.parse(localStorage.getItem(GOALS_KEY)||'null'),
     snippets:JSON.parse(localStorage.getItem(SNIP_KEY)||'null'),
+    customOptions:getCustomOpts(),
   }}catch(e){return {}}
 }
 async function applySettings(s){
@@ -1193,6 +1194,7 @@ async function applySettings(s){
   try{
     if(s.goals)localStorage.setItem(GOALS_KEY,JSON.stringify(s.goals));
     if(s.snippets)localStorage.setItem(SNIP_KEY,JSON.stringify(s.snippets));
+    if(s.customOptions)saveCustomOpts(s.customOptions);
   }catch(e){}
 }
 async function syncFromServer(){
@@ -1212,10 +1214,15 @@ function scheduleSync(){
 async function pushToServer(){
   try{
     await fetch('/api/leads',{method:'PUT',headers:{'Content-Type':'application/json'},
-      credentials:'same-origin',body:JSON.stringify({leads,settings:collectSettings()})});
+      credentials:'same-origin',body:JSON.stringify({leads,settings:collectSettings()}),keepalive:true});
     lastSynced=JSON.stringify(leads);
   }catch(e){flash('⚠ Offline — changes cached locally and will stay on this device')}
 }
+/* flush pending edits when the tab is closed or hidden mid-debounce */
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden'&&syncTimer){clearTimeout(syncTimer);syncTimer=null;pushToServer();}
+});
+window.addEventListener('pagehide',()=>{if(syncTimer){clearTimeout(syncTimer);syncTimer=null;pushToServer();}});
 
 /* ---------------- DAILY PLAN / ALERTS ---------------- */
 function buildDailyPlan(){
