@@ -208,6 +208,7 @@
     <button id="nav-coach" onclick="setView('coach')">Sales Coach <span class="nav-badge" id="coach-badge" style="display:none"></span></button>
   </nav>
   <button class="btn ghost" onclick="openSnippets(event)">✉ Snippets</button>
+  <button class="btn ghost" onclick="openSettings(event)">⚙ Settings</button>
   <div id="snip-menu" style="display:none;position:absolute;left:0;top:110%;background:#fff;border:1px solid var(--border);border-radius:11px;box-shadow:var(--shadow);min-width:230px;padding:6px;z-index:99"></div>
   <div class="spacer"></div>
   <button class="btn ghost" onclick="toggleMenu(event,'import-menu')">⬆ Import ▾</button>
@@ -318,6 +319,12 @@
 </div>
 
 <!-- Goals Modal -->
+<div class="overlay" id="settings-overlay">
+  <div class="modal" style="width:520px;max-height:86vh;overflow-y:auto">
+    <h2>⚙ Settings</h2>
+    <div id="settings-body"></div>
+  </div>
+</div>
 <div class="overlay" id="goals-overlay">
   <div class="modal" style="width:420px">
     <h2>\uD83C\uDFAF Monthly Targets</h2>
@@ -1076,6 +1083,126 @@ function copySummary(){
     .catch(()=>{const ta=document.createElement('textarea');ta.value=tsv;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();flash('Summary copied')});
 }
 
+/* ---------------- SETTINGS ---------------- */
+function getCadence(){
+  const s=getCustomOpts().cadence;
+  return Object.assign({},CADENCE,s||{});
+}
+async function saveCadence(){
+  const g=id=>+document.getElementById(id).value||0;
+  const c={Leads:g('cd-Leads'),MQLs:g('cd-MQLs'),SQLs:g('cd-SQLs'),Deals:g('cd-Deals'),Client:g('cd-Client')};
+  for(const k in c)if(c[k]<1)return flash('⚠ Cadence days must be at least 1');
+  const o=getCustomOpts();o.cadence=c;saveCustomOpts(o);
+  renderCoach();renderDailyAlert();renderBoard();
+  flash('✅ Cadence saved — syncs to your account');
+}
+function openSettings(){
+  applyCustomOptions();
+  const u=currentUserCache||{};
+  const cad=getCadence();
+  const custom=getCustomOpts();
+  document.getElementById('settings-body').innerHTML=`
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.55">Everything here saves automatically to your account and follows you to any device.</div>
+
+    <h3 style="font-size:14px;margin-bottom:8px">👤 Account</h3>
+    <div style="background:#fbfcfd;border:1px solid var(--border);border-radius:10px;padding:12px;font-size:13px;margin-bottom:18px">
+      <b>${esc(u.name||'—')}</b><br><span style="color:var(--muted)">${esc(u.email||'')}</span>
+      ${u.provider==='google'||!u.has_password?'<div style="margin-top:4px;color:var(--muted)">Signed in with Google</div>':''}
+      <div style="margin-top:6px;font-size:12px">Leads stored: <b>${leads.length}</b> · Last saved: <b>${lastSynced?esc(fmtWhen(Date.now()- (window._lastSaveAt||Date.now()))):'just now'}</b></div>
+    </div>
+
+    <h3 style="font-size:14px;margin-bottom:2px">⏱ Follow-up cadence (days per stage)</h3>
+    <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">How many days may pass before a lead in each stage counts as overdue in Today's Plan.</div>
+    <div class="row2" style="grid-template-columns:repeat(5,1fr)">
+      ${Object.keys(CADENCE).map(s=>`<div class="field"><label style="font-size:11px">${s}</label><input id="cd-${s}" type="number" min="1" max="90" value="${cad[s]??7}"></div>`).join('')}
+    </div>
+    <button type="button" class="btn" style="padding:6px 14px;font-size:12px;margin-bottom:18px" onclick="saveCadence()">Save cadence</button>
+
+    <h3 style="font-size:14px;margin-bottom:8px">🛠 Manage dropdown options</h3>
+    <div style="display:flex;gap:18px;margin-bottom:18px;font-size:12.5px">
+      <div style="flex:1"><b>Roles (${(custom.role||[]).length} custom)</b>
+        ${(custom.role||[]).length?'<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px">'+custom.role.map(r=>`<span style="background:#efece3;border:1px solid var(--border);border-radius:99px;padding:3px 10px">${esc(r)}<a onclick="removeCustomOpt('role','${esc(r)}')" style="color:#c0392b;cursor:pointer;margin-left:5px;font-weight:800">×</a></span>`).join('')+'</div>':'<div style="color:var(--muted);margin-top:4px">None added yet</div>'}
+      </div>
+      <div style="flex:1"><b>Sources (${(custom.source||[]).length} custom)</b>
+        ${(custom.source||[]).length?'<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px">'+custom.source.map(r=>`<span style="background:#efece3;border:1px solid var(--border);border-radius:99px;padding:3px 10px">${esc(r)}<a onclick="removeCustomOpt('source','${esc(r)}')" style="color:#c0392b;cursor:pointer;margin-left:5px;font-weight:800">×</a></span>`).join('')+'</div>':'<div style="color:var(--muted);margin-top:4px">None added yet</div>'}
+      </div>
+    </div>
+
+    <h3 style="font-size:14px;margin-bottom:8px">💾 Backup & restore</h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">
+      <button type="button" class="btn ghost" style="padding:6px 14px;font-size:12px" onclick="downloadBackup()">⬇ Download backup (.json)</button>
+      <label class="btn ghost" style="padding:6px 14px;font-size:12px;cursor:pointer;display:inline-flex;align-items:center">⬆ Restore from file<input type="file" accept=".json" style="display:none" onchange="restoreBackup(this.files[0])"></label>
+    </div>
+
+    <h3 style="font-size:14px;margin-bottom:8px" >🗑 Danger zone</h3>
+    <div style="background:#fdf3f2;border:1px solid #e5b4ae;border-radius:10px;padding:12px;font-size:12.5px;line-height:1.55">
+      Delete every lead on your account. Your login stays, but all pipeline data is erased everywhere.
+      <button type="button" class="btn ghost" style="padding:6px 14px;font-size:12px;color:#c0392b;border-color:#c0392b;margin-left:10px" onclick="wipeAllData()">Delete all leads…</button>
+    </div>`;
+  document.getElementById('settings-overlay').classList.add('open');
+}
+function closeSettings(){document.getElementById('settings-overlay').classList.remove('open');}
+function removeCustomOpt(kind,val){
+  if(!confirm(`Remove "${val}" from your ${kind} options?`))return;
+  const o=getCustomOpts();
+  o[kind]=(o[kind]||[]).filter(x=>x!==val);
+  saveCustomOpts(o);
+  openSettings();
+}
+function downloadBackup(){
+  const blob=new Blob([JSON.stringify({exported:new Date().toISOString(),leads,settings:getCustomOpts(),goals:getGoals()},null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='vt-crm-backup-'+new Date().toISOString().slice(0,10)+'.json';
+  a.click();URL.revokeObjectURL(a.href);
+  flash('✅ Backup downloaded');
+}
+function restoreBackup(file){
+  if(!file)return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    let j;try{j=JSON.parse(rd.result)}catch(e){return flash('⚠ Not a valid backup file')}
+    if(!Array.isArray(j.leads))return flash('⚠ No leads found in that file');
+    if(!confirm(`Restore ${j.leads.length} leads from this backup?\n\nThis REPLACES everything currently on your account.`))return;
+    leads=j.leads;
+    save();renderBoard();renderCoach();renderDailyAlert();
+    flash(`✅ Restored ${j.leads.length} leads`);
+    closeSettings();
+  };
+  rd.readAsText(file);
+}
+async function wipeAllData(){
+  if(!confirm('Delete ALL leads on your account?\n\nThis cannot be undone.'))return;
+  if(prompt('Type DELETE to confirm:')!=='DELETE')return;
+  leads=[];save();renderBoard();renderCoach();renderDailyAlert();
+  flash('All leads deleted');closeSettings();
+}
+
+/* ---------------- PASSWORD SHOW/HIDE ---------------- */
+function togglePw(id,btn){
+  const inp=document.getElementById(id);
+  if(!inp)return;
+  const show=inp.type==='password';
+  inp.type=show?'text':'password';
+  btn.textContent=show?'🙈':'👁';
+  btn.title=show?'Hide password':'Show password';
+}
+function initPwToggles(){
+  ['li-pass','su-pass','su-pass2','fg-pass','fg-pass2'].forEach(id=>{
+    const inp=document.getElementById(id);
+    if(!inp||inp.parentElement.querySelector('.pw-eye'))return;
+    inp.style.paddingRight='34px';
+    const b=document.createElement('button');
+    b.type='button';b.className='pw-eye';b.textContent='👁';
+    b.title='Show password';
+    b.setAttribute('onclick',`togglePw('${id}',this)`);
+    b.style.cssText='position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:15px;padding:2px;line-height:1';
+    const wrap=inp.parentElement;
+    wrap.style.position='relative';
+    wrap.appendChild(b);
+  });
+}
+
 /* ---------------- AUTH (server-backed) ---------------- */
 const CUSTOM_OPTS_KEY='vt_lead_custom_options_v1';
 function getCustomOpts(){try{return JSON.parse(localStorage.getItem(CUSTOM_OPTS_KEY))||{role:[],source:[]}}catch(e){return {role:[],source:[]}}}
@@ -1193,6 +1320,8 @@ function renderUserChip(){
   const u=await currentUser();
   if(u){document.getElementById('auth-screen').classList.add('hidden');renderUserChip();await syncFromServer();}
 })();
+initPwToggles();
+try{Object.assign(CADENCE,getCustomOpts().cadence||{})}catch(e){}
 
 /* ---------------- SERVER SYNC for leads ---------------- */
 let syncTimer=null;
@@ -1209,7 +1338,7 @@ async function applySettings(s){
   try{
     if(s.goals)localStorage.setItem(GOALS_KEY,JSON.stringify(s.goals));
     if(s.snippets)localStorage.setItem(SNIP_KEY,JSON.stringify(s.snippets));
-    if(s.customOptions)saveCustomOpts(s.customOptions);
+    if(s.customOptions){saveCustomOpts(s.customOptions);if(s.customOptions.cadence)Object.assign(CADENCE,s.customOptions.cadence);}
   }catch(e){}
 }
 async function syncFromServer(){
